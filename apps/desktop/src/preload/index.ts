@@ -9,6 +9,9 @@ const desktopCatApi = {
   setIgnoreMouseEvents(ignore: boolean): void {
     ipcRenderer.send('desktop-cat:set-ignore-mouse-events', ignore)
   },
+  moveWindowBy(deltaX: number, deltaY: number): void {
+    ipcRenderer.send('desktop-cat:move-window-by', deltaX, deltaY)
+  },
 }
 
 //暴露到浏览器
