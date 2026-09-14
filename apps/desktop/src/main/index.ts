@@ -305,6 +305,30 @@ function registerIpcHandlers(): void {
 
     senderWindow.setIgnoreMouseEvents(ignore, { forward: ignore })
   })
+
+  ipcMain.on('desktop-cat:move-window-by', (event, deltaX: unknown, deltaY: unknown) => {
+    if (
+      typeof deltaX !== 'number'
+      || typeof deltaY !== 'number'
+      || !Number.isFinite(deltaX)
+      || !Number.isFinite(deltaY)
+      || Math.abs(deltaX) > WINDOW_WIDTH
+      || Math.abs(deltaY) > WINDOW_HEIGHT
+    ) {
+      return
+    }
+
+    const senderWindow = BrowserWindow.fromWebContents(event.sender)
+    if (!senderWindow || senderWindow !== catWindow) {
+      return
+    }
+
+    const [currentX, currentY] = senderWindow.getPosition()
+    senderWindow.setPosition(
+      currentX + Math.round(deltaX),
+      currentY + Math.round(deltaY),
+    )
+  })
 }
 
 const hasSingleInstanceLock = app.requestSingleInstanceLock()

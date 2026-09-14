@@ -12,6 +12,7 @@ const SLEEP_DURATION_MS = 12_000
 const catState = ref<CatState>('running')
 const message = ref('一起跑一圈～')
 const isReacting = ref(false)
+const isDragging = ref(false)
 
 const catImageUrl = computed(() => (
   catState.value === 'running' ? runningCatUrl : sleepingCatUrl
@@ -26,6 +27,14 @@ let clickTimer: number | undefined
 let reactionTimer: number | undefined
 let messageTimer: number | undefined
 let isIgnoringMouseEvents = false
+let activePointerId: number | undefined
+let dragStartScreenX = 0
+let dragStartScreenY = 0
+let lastPointerScreenX = 0
+let lastPointerScreenY = 0
+let suppressNextClick = false
+
+const DRAG_THRESHOLD_PX = 4
 
 function setMousePassThrough(ignore: boolean): void {
   if (ignore === isIgnoringMouseEvents) return
@@ -105,11 +114,66 @@ function reactToTouch(): void {
 }
 
 function handleCatClick(): void {
+  if (suppressNextClick) {
+    suppressNextClick = false
+    return
+  }
+
   if (clickTimer) return
   clickTimer = window.setTimeout(() => {
     clickTimer = undefined
     reactToTouch()
   }, 220)
+}
+
+function handleCatPointerDown(event: PointerEvent): void {
+  if (event.button !== 0 || activePointerId !== undefined) return
+
+  activePointerId = event.pointerId
+  dragStartScreenX = event.screenX
+  dragStartScreenY = event.screenY
+  lastPointerScreenX = event.screenX
+  lastPointerScreenY = event.screenY
+  isDragging.value = false
+  setMousePassThrough(false)
+  event.currentTarget instanceof Element && event.currentTarget.setPointerCapture(event.pointerId)
+}
+
+function handleCatPointerMove(event: PointerEvent): void {
+  if (event.pointerId !== activePointerId) return
+
+  const totalX = event.screenX - dragStartScreenX
+  const totalY = event.screenY - dragStartScreenY
+  if (!isDragging.value && Math.hypot(totalX, totalY) < DRAG_THRESHOLD_PX) return
+
+  isDragging.value = true
+  const deltaX = event.screenX - lastPointerScreenX
+  const deltaY = event.screenY - lastPointerScreenY
+  lastPointerScreenX = event.screenX
+  lastPointerScreenY = event.screenY
+
+  if (deltaX !== 0 || deltaY !== 0) {
+    window.desktopCat.moveWindowBy(deltaX, deltaY)
+  }
+}
+
+function finishCatDrag(event: PointerEvent): void {
+  if (event.pointerId !== activePointerId) return
+
+  const target = event.currentTarget
+  if (target instanceof Element && target.hasPointerCapture(event.pointerId)) {
+    target.releasePointerCapture(event.pointerId)
+  }
+
+  if (isDragging.value) {
+    suppressNextClick = true
+    window.setTimeout(() => {
+      suppressNextClick = false
+    }, 0)
+  }
+
+  activePointerId = undefined
+  isDragging.value = false
 }
 
 function handleCatDoubleClick(): void {
@@ -152,11 +216,15 @@ onBeforeUnmount(() => {
 
     <button
       class="cat-button"
-      :class="[catState, { reacting: isReacting }]"
+      :class="[catState, { reacting: isReacting, dragging: isDragging }]"
       type="button"
       data-interactive
       :aria-label="catLabel"
-      title="单击听猫叫，双击切换奔跑和睡觉"
+      title="拖动身体移动；单击听猫叫；双击切换奔跑和睡觉"
+      @pointerdown="handleCatPointerDown"
+      @pointermove="handleCatPointerMove"
+      @pointerup="finishCatDrag"
+      @pointercancel="finishCatDrag"
       @click="handleCatClick"
       @dblclick="handleCatDoubleClick"
     >
@@ -250,9 +318,14 @@ onBeforeUnmount(() => {
   border: 0;
   outline: 0;
   background: transparent;
-  cursor: pointer;
+  cursor: grab;
+  touch-action: none;
   -webkit-app-region: no-drag;
   app-region: no-drag;
+}
+
+.cat-button.dragging {
+  cursor: grabbing;
 }
 
 .cat-button.running {
