@@ -1,27 +1,34 @@
-//小猫样式和互动
 <script setup lang="ts">
-/**
- * ref：创建响应式变量
- * onMounted：组件显示后注册事件
- * onBeforeUnmount：组件销毁前清理资源
- */
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import runningCatUrl from './assets/cat/cat-running-v2.png'
+import sleepingCatUrl from './assets/cat/cat-sleeping-v2.png'
+import meowUrl from './assets/audio/happy-cat-meow.mp3'
 
-//message 控制气泡文字。
-//isReacting 控制是否添加：
-const message = ref('摸摸我，我会喵～')
+type CatState = 'running' | 'sleeping'
+
+const RUN_DURATION_MS = 9_000
+const SLEEP_DURATION_MS = 12_000
+
+const catState = ref<CatState>('running')
+const message = ref('一起跑一圈～')
 const isReacting = ref(false)
 
-let audioContext: AudioContext | null = null
+const catImageUrl = computed(() => (
+  catState.value === 'running' ? runningCatUrl : sleepingCatUrl
+))
+const catLabel = computed(() => (
+  catState.value === 'running' ? '正在奔跑的黑色小猫' : '正在睡觉的黑色小猫'
+))
+
+let meowAudio: HTMLAudioElement | null = null
+let stateTimer: number | undefined
+let clickTimer: number | undefined
 let reactionTimer: number | undefined
 let messageTimer: number | undefined
 let isIgnoringMouseEvents = false
 
 function setMousePassThrough(ignore: boolean): void {
-  if (ignore === isIgnoringMouseEvents) {
-    return
-  }
-
+  if (ignore === isIgnoringMouseEvents) return
   isIgnoringMouseEvents = ignore
   window.desktopCat.setIgnoreMouseEvents(ignore)
 }
@@ -37,173 +44,131 @@ function handleMouseLeave(): void {
 }
 
 function playMeow(): void {
-  audioContext ??= new AudioContext()
-  void audioContext.resume()
+  meowAudio ??= new Audio(meowUrl)
+  meowAudio.pause()
+  meowAudio.currentTime = 0
+  meowAudio.volume = 0.58
+  void meowAudio.play().catch((error: unknown) => {
+    console.warn('Failed to play the cat meow.', error)
+  })
+}
 
-  const now = audioContext.currentTime
-  const volume = audioContext.createGain()
-  const voice = audioContext.createOscillator()
-  const overtone = audioContext.createOscillator()
-  const overtoneVolume = audioContext.createGain()
+function clearStateTimer(): void {
+  if (!stateTimer) return
+  window.clearTimeout(stateTimer)
+  stateTimer = undefined
+}
 
-  voice.type = 'triangle'
-  voice.frequency.setValueAtTime(520, now)
-  voice.frequency.exponentialRampToValueAtTime(760, now + 0.11)
-  voice.frequency.exponentialRampToValueAtTime(390, now + 0.43)
+function scheduleNextState(): void {
+  clearStateTimer()
+  const delay = catState.value === 'running' ? RUN_DURATION_MS : SLEEP_DURATION_MS
+  stateTimer = window.setTimeout(() => {
+    setCatState(catState.value === 'running' ? 'sleeping' : 'running')
+  }, delay)
+}
 
-  overtone.type = 'sine'
-  overtone.frequency.setValueAtTime(1040, now)
-  overtone.frequency.exponentialRampToValueAtTime(1420, now + 0.12)
-  overtone.frequency.exponentialRampToValueAtTime(720, now + 0.4)
+function setCatState(nextState: CatState, customMessage?: string): void {
+  catState.value = nextState
+  message.value = customMessage ?? (
+    nextState === 'running' ? '睡醒啦，去跑一圈！' : '跑累了，呼噜呼噜…'
+  )
+  scheduleNextState()
+}
 
-  volume.gain.setValueAtTime(0.0001, now)
-  volume.gain.exponentialRampToValueAtTime(0.16, now + 0.025)
-  volume.gain.setValueAtTime(0.16, now + 0.16)
-  volume.gain.exponentialRampToValueAtTime(0.0001, now + 0.46)
-
-  overtoneVolume.gain.setValueAtTime(0.025, now)
-  overtoneVolume.gain.exponentialRampToValueAtTime(0.0001, now + 0.39)
-
-  voice.connect(volume)
-  overtone.connect(overtoneVolume)
-  overtoneVolume.connect(volume)
-  volume.connect(audioContext.destination)
-
-  voice.start(now)
-  overtone.start(now)
-  voice.stop(now + 0.47)
-  overtone.stop(now + 0.42)
+function toggleState(): void {
+  setCatState(catState.value === 'running' ? 'sleeping' : 'running')
 }
 
 function reactToTouch(): void {
   playMeow()
-  message.value = '喵～ 今天也辛苦啦'
   isReacting.value = false
 
-  if (reactionTimer) {
-    window.clearTimeout(reactionTimer)
-  }
-  if (messageTimer) {
-    window.clearTimeout(messageTimer)
+  if (reactionTimer) window.clearTimeout(reactionTimer)
+  if (messageTimer) window.clearTimeout(messageTimer)
+
+  if (catState.value === 'sleeping') {
+    setCatState('running', '你把我叫醒啦，喵～')
+  } else {
+    message.value = '喵！快跟上我～'
+    scheduleNextState()
   }
 
   window.requestAnimationFrame(() => {
     isReacting.value = true
   })
-
   reactionTimer = window.setTimeout(() => {
     isReacting.value = false
-  }, 520)
-
+  }, 480)
   messageTimer = window.setTimeout(() => {
-    message.value = '摸摸我，我会喵～'
-  }, 2200)
+    message.value = catState.value === 'running' ? '一起跑一圈～' : '呼噜呼噜…'
+  }, 2_200)
+}
+
+function handleCatClick(): void {
+  if (clickTimer) return
+  clickTimer = window.setTimeout(() => {
+    clickTimer = undefined
+    reactToTouch()
+  }, 220)
+}
+
+function handleCatDoubleClick(): void {
+  if (clickTimer) {
+    window.clearTimeout(clickTimer)
+    clickTimer = undefined
+  }
+  toggleState()
 }
 
 onMounted(() => {
   window.addEventListener('mousemove', handleMouseMove)
   window.addEventListener('mouseleave', handleMouseLeave)
+  scheduleNextState()
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('mousemove', handleMouseMove)
   window.removeEventListener('mouseleave', handleMouseLeave)
-  if (reactionTimer) {
-    window.clearTimeout(reactionTimer)
+  clearStateTimer()
+  if (clickTimer) window.clearTimeout(clickTimer)
+  if (reactionTimer) window.clearTimeout(reactionTimer)
+  if (messageTimer) window.clearTimeout(messageTimer)
+  if (meowAudio) {
+    meowAudio.pause()
+    meowAudio.src = ''
   }
-  if (messageTimer) {
-    window.clearTimeout(messageTimer)
-  }
-  void audioContext?.close()
 })
 </script>
 
 <template>
-  <main class="desktop-pet">
-    <p class="speech" role="status">{{ message }}</p>
-
-    <div
-      class="drag-handle"
+  <main class="desktop-pet" :class="`state-${catState}`">
+    <p
+      class="speech"
+      role="status"
       data-interactive
-      title="按住小猫耳朵附近拖动"
-      aria-label="拖动小猫"
-    />
+      title="按住气泡拖动小猫"
+    >{{ message }}</p>
+    <div class="drag-handle" data-interactive title="按住这里拖动小猫" aria-label="拖动小猫" />
 
     <button
       class="cat-button"
-      :class="{ reacting: isReacting }"
+      :class="[catState, { reacting: isReacting }]"
       type="button"
       data-interactive
-      aria-label="摸摸小猫"
-      title="点击摸摸小猫"
-      @click="reactToTouch"
+      :aria-label="catLabel"
+      title="单击听猫叫，双击切换奔跑和睡觉"
+      @click="handleCatClick"
+      @dblclick="handleCatDoubleClick"
     >
-      <svg class="cat-art" viewBox="0 0 260 270" role="img" aria-label="一只橘色 Q 版小猫">
-        <defs>
-          <linearGradient id="fur" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0" stop-color="#ffd19d" />
-            <stop offset="1" stop-color="#ee9868" />
-          </linearGradient>
-          <linearGradient id="cream" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0" stop-color="#fffaf0" />
-            <stop offset="1" stop-color="#ffe8ce" />
-          </linearGradient>
-          <filter id="soft-shadow" x="-30%" y="-30%" width="160%" height="160%">
-            <feDropShadow dx="0" dy="5" stdDeviation="5" flood-color="#72554a" flood-opacity=".22" />
-          </filter>
-        </defs>
-
-        <ellipse cx="130" cy="250" rx="82" ry="12" fill="#66504a" opacity=".16" />
-
-        <g filter="url(#soft-shadow)">
-          <path
-            class="tail"
-            d="M61 184C22 172 18 219 47 226C65 230 70 212 58 205C48 199 42 210 48 216"
-            fill="none"
-            stroke="#ee9868"
-            stroke-linecap="round"
-            stroke-width="20"
-          />
-          <ellipse cx="133" cy="178" rx="69" ry="73" fill="url(#fur)" />
-          <ellipse cx="133" cy="190" rx="43" ry="50" fill="url(#cream)" opacity=".92" />
-
-          <path d="M74 75L83 20L121 61Z" fill="url(#fur)" />
-          <path d="M186 75L177 20L139 61Z" fill="url(#fur)" />
-          <path d="M84 56L89 33L107 59Z" fill="#ef9aa0" opacity=".82" />
-          <path d="M176 56L171 33L153 59Z" fill="#ef9aa0" opacity=".82" />
-
-          <ellipse cx="130" cy="91" rx="70" ry="59" fill="url(#fur)" />
-          <ellipse cx="130" cy="107" rx="48" ry="36" fill="url(#cream)" opacity=".93" />
-
-          <path d="M91 58C105 48 112 51 122 61" fill="none" stroke="#d98056" stroke-linecap="round" stroke-width="6" />
-          <path d="M169 58C155 48 148 51 138 61" fill="none" stroke="#d98056" stroke-linecap="round" stroke-width="6" />
-          <path d="M130 43V58" fill="none" stroke="#d98056" stroke-linecap="round" stroke-width="6" />
-
-          <ellipse class="eye eye-left" cx="103" cy="91" rx="8" ry="11" fill="#493b39" />
-          <ellipse class="eye eye-right" cx="157" cy="91" rx="8" ry="11" fill="#493b39" />
-          <circle cx="106" cy="87" r="2.4" fill="#fff" />
-          <circle cx="160" cy="87" r="2.4" fill="#fff" />
-
-          <path d="M124 106Q130 100 136 106Q130 114 124 106Z" fill="#ed7d86" />
-          <path d="M130 112V116" stroke="#493b39" stroke-linecap="round" stroke-width="2.5" />
-          <path d="M130 116Q122 124 115 117" fill="none" stroke="#493b39" stroke-linecap="round" stroke-width="2.5" />
-          <path d="M130 116Q138 124 145 117" fill="none" stroke="#493b39" stroke-linecap="round" stroke-width="2.5" />
-
-          <g stroke="#8d6659" stroke-linecap="round" stroke-width="2" opacity=".72">
-            <path d="M113 110L77 103" />
-            <path d="M112 116L73 118" />
-            <path d="M147 110L183 103" />
-            <path d="M148 116L187 118" />
-          </g>
-
-          <ellipse cx="102" cy="230" rx="28" ry="22" fill="#ffd4a7" />
-          <ellipse cx="164" cy="230" rx="28" ry="22" fill="#ffd4a7" />
-          <path d="M92 226V235M102 224V235M154 224V235M164 226V235" stroke="#d98a62" stroke-linecap="round" stroke-width="2.5" />
-        </g>
-      </svg>
+      <img class="cat-image" :src="catImageUrl" :alt="catLabel" draggable="false" />
     </button>
 
-    <span class="drag-tip">拖住耳朵移动 · 点击身体摸摸</span>
+    <div v-if="catState === 'running'" class="speed-lines" aria-hidden="true">
+      <i /><i /><i />
+    </div>
+    <div v-else class="sleep-marks" aria-hidden="true">
+      <i>z</i><i>Z</i>
+    </div>
   </main>
 </template>
 
@@ -216,46 +181,55 @@ onBeforeUnmount(() => {
 
 .speech {
   position: absolute;
-  z-index: 5;
+  z-index: 6;
   top: 4px;
   left: 50%;
-  min-width: 158px;
-  max-width: 230px;
+  min-width: 126px;
+  max-width: 188px;
   margin: 0;
-  padding: 9px 14px;
+  padding: 7px 11px;
   transform: translateX(-50%);
-  border: 1px solid rgb(221 171 139 / 65%);
-  border-radius: 18px;
-  background: rgb(255 251 244 / 92%);
-  box-shadow: 0 5px 16px rgb(91 65 56 / 14%);
-  color: #66504a;
-  font-size: 13px;
+  border: 1px solid rgb(206 168 119 / 62%);
+  border-radius: 15px;
+  background: rgb(255 250 239 / 94%);
+  box-shadow: 0 4px 12px rgb(38 29 28 / 16%);
+  color: #564441;
+  font-size: 11px;
   line-height: 1.25;
   text-align: center;
-  pointer-events: none;
+  cursor: grab;
+  pointer-events: auto;
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+
+.speech:active {
+  cursor: grabbing;
 }
 
 .speech::after {
   position: absolute;
-  bottom: -7px;
-  left: calc(50% - 7px);
-  width: 13px;
-  height: 13px;
+  bottom: -6px;
+  left: calc(50% - 6px);
+  width: 10px;
+  height: 10px;
   transform: rotate(45deg);
-  border-right: 1px solid rgb(221 171 139 / 65%);
-  border-bottom: 1px solid rgb(221 171 139 / 65%);
-  background: rgb(255 251 244 / 92%);
+  border-right: 1px solid rgb(206 168 119 / 62%);
+  border-bottom: 1px solid rgb(206 168 119 / 62%);
+  background: rgb(255 250 239 / 94%);
   content: "";
 }
 
 .drag-handle {
   position: absolute;
-  z-index: 4;
-  top: 54px;
-  left: 53px;
-  width: 174px;
-  height: 54px;
+  z-index: 7;
+  top: 38px;
+  left: 50px;
+  width: 120px;
+  height: 34px;
+  border-radius: 10px;
   cursor: grab;
+  -webkit-app-region: drag;
   app-region: drag;
 }
 
@@ -265,119 +239,148 @@ onBeforeUnmount(() => {
 
 .cat-button {
   position: absolute;
-  z-index: 2;
-  bottom: 15px;
-  left: 10px;
-  width: 260px;
-  height: 270px;
+  z-index: 3;
+  bottom: 9px;
+  left: 5px;
+  width: 210px;
+  height: 154px;
   margin: 0;
   padding: 0;
-  transform-origin: 50% 82%;
+  transform-origin: 50% 78%;
   border: 0;
   outline: 0;
   background: transparent;
   cursor: pointer;
+  -webkit-app-region: no-drag;
   app-region: no-drag;
-  clip-path: polygon(17% 18%, 33% 4%, 47% 14%, 53% 14%, 67% 4%, 83% 18%, 90% 43%, 79% 59%, 87% 87%, 71% 98%, 31% 98%, 13% 88%, 20% 62%, 7% 76%, 3% 64%, 15% 48%, 10% 34%);
-  animation: breathe 3.2s ease-in-out infinite;
+}
+
+.cat-button.running {
+  clip-path: polygon(0 15%, 28% 3%, 47% 15%, 56% 0, 93% 8%, 100% 45%, 93% 95%, 57% 100%, 37% 88%, 10% 97%);
+}
+
+.cat-button.sleeping {
+  clip-path: ellipse(49% 43% at 50% 57%);
 }
 
 .cat-button:focus-visible {
-  filter: drop-shadow(0 0 8px rgb(255 255 255 / 95%));
+  filter: drop-shadow(0 0 6px rgb(255 211 98 / 90%));
 }
 
-.cat-button.reacting {
-  animation: happy-bounce 520ms cubic-bezier(.2, .8, .25, 1);
-}
-
-.cat-art {
+.cat-image {
   display: block;
   width: 100%;
   height: 100%;
-  overflow: visible;
+  object-fit: contain;
+  pointer-events: none;
+  user-select: none;
+}
+
+.cat-button.running .cat-image {
+  animation: run-cycle 560ms cubic-bezier(.45, 0, .55, 1) infinite;
+}
+
+.cat-button.sleeping .cat-image {
+  transform-origin: 55% 78%;
+  animation: sleep-breathe 3.6s ease-in-out infinite;
+}
+
+.cat-button.reacting .cat-image {
+  animation: touch-pop 480ms cubic-bezier(.2, .85, .3, 1);
+}
+
+.speed-lines {
+  position: absolute;
+  z-index: 2;
+  bottom: 62px;
+  left: 5px;
+  width: 48px;
   pointer-events: none;
 }
 
-.eye {
-  transform-box: fill-box;
-  transform-origin: center;
-  animation: blink 5.4s infinite;
+.speed-lines i {
+  display: block;
+  width: 32px;
+  height: 2px;
+  margin-top: 8px;
+  border-radius: 2px;
+  background: rgb(238 179 74 / 52%);
+  animation: speed-line 760ms ease-out infinite;
 }
 
-.tail {
-  transform-box: fill-box;
-  transform-origin: right center;
-  animation: tail-sway 2.7s ease-in-out infinite;
+.speed-lines i:nth-child(2) {
+  width: 44px;
+  animation-delay: -240ms;
 }
 
-.drag-tip {
+.speed-lines i:nth-child(3) {
+  width: 24px;
+  animation-delay: -480ms;
+}
+
+.sleep-marks {
   position: absolute;
   z-index: 5;
-  bottom: 1px;
-  left: 50%;
-  padding: 4px 10px;
-  transform: translateX(-50%);
-  border-radius: 12px;
-  background: rgb(79 60 55 / 72%);
-  color: rgb(255 255 255 / 92%);
-  font-size: 10px;
-  line-height: 1;
-  white-space: nowrap;
+  top: 65px;
+  right: 18px;
+  color: rgb(243 184 70 / 88%);
+  font-family: Georgia, serif;
+  font-weight: 700;
   pointer-events: none;
 }
 
-@keyframes breathe {
-  0%,
-  100% {
-    transform: translateY(0) scale(1);
-  }
-  50% {
-    transform: translateY(2px) scale(1.008, .995);
-  }
+.sleep-marks i {
+  position: absolute;
+  font-style: normal;
+  animation: float-z 2.4s ease-in-out infinite;
 }
 
-@keyframes happy-bounce {
-  0% {
-    transform: translateY(0) rotate(0);
-  }
-  35% {
-    transform: translateY(-13px) rotate(-3deg);
-  }
-  65% {
-    transform: translateY(-5px) rotate(3deg);
-  }
-  100% {
-    transform: translateY(0) rotate(0);
-  }
+.sleep-marks i:first-child {
+  top: 18px;
+  right: 12px;
+  font-size: 14px;
 }
 
-@keyframes blink {
-  0%,
-  44%,
-  48%,
-  100% {
-    transform: scaleY(1);
-  }
-  46% {
-    transform: scaleY(.08);
-  }
+.sleep-marks i:last-child {
+  top: 0;
+  right: 0;
+  font-size: 20px;
+  animation-delay: -1.2s;
 }
 
-@keyframes tail-sway {
-  0%,
-  100% {
-    transform: rotate(-3deg);
-  }
-  50% {
-    transform: rotate(7deg);
-  }
+@keyframes run-cycle {
+  0%, 100% { transform: translate(-3px, 1px) rotate(-1deg) scaleX(1); }
+  50% { transform: translate(4px, -5px) rotate(1.5deg) scaleX(1.015); }
+}
+
+@keyframes sleep-breathe {
+  0%, 100% { transform: translateY(1px) scale(1); }
+  50% { transform: translateY(3px) scale(1.012, .988); }
+}
+
+@keyframes touch-pop {
+  0% { transform: translateY(0) scale(1); }
+  45% { transform: translateY(-10px) scale(1.04) rotate(-2deg); }
+  75% { transform: translateY(-3px) scale(.99) rotate(1deg); }
+  100% { transform: translateY(0) scale(1); }
+}
+
+@keyframes speed-line {
+  from { transform: translateX(18px) scaleX(.45); opacity: 0; }
+  35% { opacity: .8; }
+  to { transform: translateX(-8px) scaleX(1); opacity: 0; }
+}
+
+@keyframes float-z {
+  0%, 100% { transform: translate(0, 3px) scale(.9); opacity: .25; }
+  50% { transform: translate(4px, -5px) scale(1.08); opacity: 1; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .cat-button,
-  .eye,
-  .tail {
-    animation: none;
+  .cat-image,
+  .speed-lines i,
+  .sleep-marks i {
+    animation: none !important;
   }
 }
 </style>

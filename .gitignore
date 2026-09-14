@@ -2,6 +2,7 @@ node_modules/
 dist/
 out/
 release/
+@desktop-catdesktop/
 target/
 .pnpm-store/
 .m2/

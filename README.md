@@ -7,8 +7,8 @@ Vue 3 + Electron + Spring Boot 3 + JDK 21，使用原生 MyBatis。当前已经�
 - 已建立 Vue、TypeScript、Vite、Router 和 Pinia 前端基础。
 - 已建立 Spring Boot 3.5.16 后端，加入 Validation、Actuator、MyBatis Starter 3.0.5 和 PostgreSQL 驱动。
 - 默认 `local` 配置不启动数据源，可以直接体验前后端联通。
-- 已建立 Electron 桌面端：透明无边框窗口、置顶显示、透明区域鼠标穿透、拖动、点击喵声、小猫动画、托盘显隐与退出、窗口位置记忆和 Windows 安装包。
-- 当前小猫是项目内原创的 SVG 占位形象，后续取得自己小猫的照片和特征后再替换为正式角色包。
+- 已建立 Electron 桌面端：透明无边框窗口、置顶显示、透明区域鼠标穿透、拖动、真实猫叫、小猫动画、托盘显隐与退出、窗口位置记忆和 Windows 安装包。
+- 当前 Q 版黑猫根据自己的猫照片生成，保留纯黑毛、圆脸、厚爪与琥珀眼；包含奔跑和睡觉两种透明 PNG 状态。
 - 日记、数据库业务表、业务 Mapper、RAG、提醒、喂冻干、登录和开机自启尚未实现；页面中的后续方向明确标注为待开发。
 - 开发服务绑定本机地址，当前框架用于本地学习，正式发布前需补齐鉴权与部署配置。
 
@@ -52,7 +52,7 @@ cd D:\repository
 pnpm dev:desktop
 ```
 
-桌面猫不依赖 Java 后端即可运行。点击身体会播放本地合成的喵声，拖住耳朵附近可以移动；关闭窗口会隐藏到系统托盘，从托盘菜单可以重新显示或彻底退出。透明区域会穿透鼠标，不遮挡下面的桌面内容。
+桌面猫不依赖 Java 后端即可运行。它每 9 秒奔跑后睡 12 秒，再自动醒来；单击身体会播放真实猫叫并在睡眠时唤醒，双击可以手动切换奔跑和睡觉。按住文字气泡或小猫头顶附近可以拖动；关闭窗口会隐藏到系统托盘，从托盘菜单可以重新显示或彻底退出。透明区域会穿透鼠标，不遮挡下面的桌面内容。
 
 生成 Windows 安装程序：
 
@@ -61,7 +61,7 @@ cd D:\repository
 pnpm dist:desktop
 ```
 
-安装程序位于 `apps/desktop/release/猫的角落-0.1.0-x64-setup.exe`。免安装运行文件位于 `apps/desktop/release/win-unpacked/猫的角落.exe`。安装包暂未购买代码签名证书，Windows 可能显示未知发布者提示。
+安装程序位于 `apps/desktop/release/猫的角落-0.2.0-x64-setup.exe`。免安装运行文件位于 `apps/desktop/release/win-unpacked/猫的角落.exe`。安装包暂未购买代码签名证书，Windows 可能显示未知发布者提示。
 
 ## 请求是怎么走的
 
@@ -86,6 +86,8 @@ apps/desktop/                Electron 桌面猫
   src/main/                  窗口、托盘、位置保存和 IPC
   src/preload/               受限的渲染进程桥接 API
   src/renderer/              Vue 小猫界面与交互
+    src/assets/cat/          根据自己的猫生成的透明 Q 版状态图
+    src/assets/audio/        本地猫叫资源
   build/                     应用图标
 services/server/             Java 后端
   src/main/java/             启动类、按业务组织的代码
@@ -136,7 +138,7 @@ Remove-Item Env:SPRING_PROFILES_ACTIVE -ErrorAction SilentlyContinue
 - 页面连接失败：检查后端是否启动、8080 是否被占用。默认只需要启动前后端两个进程。
 - 5173 已被占用：停止原有前端进程后重启，Vite 不自动切换端口，避免访问错项目。
 - 桌面猫消失：单击系统托盘的小猫图标，或在托盘菜单中选择“显示小猫”。
-- 听不到猫叫：检查 Windows 当前输出设备和应用音量；声音只在点击后播放，不读取麦克风。
+- 听不到猫叫：检查 Windows 当前输出设备和应用音量；声音只在单击后播放，不读取麦克风。猫叫来源和许可证见 `apps/desktop/THIRD_PARTY_NOTICES.md`。
 - 首次依赖下载需要网络；依赖解析后的前端版本固定在 `pnpm-lock.yaml` 中。
 
 完整规划见 [技术栈与架构](./桌面猫个人助手-技术栈与架构.md)。

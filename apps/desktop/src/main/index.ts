@@ -31,9 +31,9 @@ import {
 } from 'electron'
 
 //窗口常量小猫的大小
-const WINDOW_WIDTH = 280
-const WINDOW_HEIGHT = 320
-const MIN_VISIBLE_SIZE = 48
+const WINDOW_WIDTH = 220
+const WINDOW_HEIGHT = 220
+const MIN_VISIBLE_SIZE = 36
 
 //小猫窗口的位置
 type WindowPosition = {
@@ -96,8 +96,8 @@ function isPositionVisible(position: WindowPosition): boolean {
 function getDefaultPosition(): WindowPosition {
   const { workArea } = screen.getPrimaryDisplay()
   return {
-    x: workArea.x + workArea.width - WINDOW_WIDTH - 24,
-    y: workArea.y + workArea.height - WINDOW_HEIGHT - 24,
+    x: workArea.x + workArea.width - WINDOW_WIDTH - 16,
+    y: workArea.y + workArea.height - WINDOW_HEIGHT - 16,
   }
 }
 
@@ -253,18 +253,18 @@ function createTrayIcon(): Electron.NativeImage {
       const rightEar = y >= 3 && y <= 13 && x <= 25 && x >= 17 + Math.floor((y - 3) / 2)
 
       if (face || leftEar || rightEar) {
-        setPixel(x, y, 246, 169, 120)
+        setPixel(x, y, 39, 33, 35)
       }
     }
   }
 
   for (const [x, y] of [[12, 17], [20, 17]] as const) {
-    setPixel(x, y, 66, 55, 52)
-    setPixel(x, y + 1, 66, 55, 52)
+    setPixel(x, y, 243, 178, 57)
+    setPixel(x, y + 1, 243, 178, 57)
   }
-  setPixel(16, 21, 234, 111, 118)
-  setPixel(15, 22, 66, 55, 52)
-  setPixel(17, 22, 66, 55, 52)
+  setPixel(16, 21, 74, 61, 61)
+  setPixel(15, 22, 118, 94, 86)
+  setPixel(17, 22, 118, 94, 86)
 
   return nativeImage.createFromBitmap(pixels, { width: size, height: size })
 }
