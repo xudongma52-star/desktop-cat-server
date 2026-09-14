@@ -6,7 +6,11 @@
   "engines": { "node": ">=22.12.0" },
   "scripts": {
     "dev": "pnpm --filter @desktop-cat/web dev",
+    "dev:desktop": "pnpm --filter @desktop-cat/desktop dev",
     "build": "pnpm --filter @desktop-cat/web build",
-    "typecheck": "pnpm --filter @desktop-cat/web typecheck"
+    "build:desktop": "pnpm --filter @desktop-cat/desktop build",
+    "dist:desktop": "pnpm --filter @desktop-cat/desktop dist:win",
+    "typecheck": "pnpm --filter @desktop-cat/web typecheck",
+    "typecheck:desktop": "pnpm --filter @desktop-cat/desktop typecheck"
   }
 }

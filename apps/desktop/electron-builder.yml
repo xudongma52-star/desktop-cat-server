@@ -1,0 +1,21 @@
+appId: com.desktopcat.corner
+productName: 猫的角落
+asar: true
+directories:
+  output: release
+  buildResources: build
+files:
+  - out/**/*
+win:
+  icon: build/icon.png
+  target:
+    - target: nsis
+      arch:
+        - x64
+artifactName: ${productName}-${version}-${arch}-setup.${ext}
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true

@@ -1,0 +1,29 @@
+{
+  "name": "@desktop-cat/desktop",
+  "private": true,
+  "version": "0.1.0",
+  "description": "猫的角落 Windows 桌面陪伴客户端",
+  "main": "./out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "start": "electron-vite preview",
+    "typecheck:node": "tsc --noEmit -p tsconfig.node.json",
+    "typecheck:web": "vue-tsc --noEmit -p tsconfig.web.json",
+    "typecheck": "pnpm run typecheck:node && pnpm run typecheck:web",
+    "build": "pnpm run typecheck && electron-vite build",
+    "dist:win": "pnpm run build && electron-builder --win nsis"
+  },
+  "dependencies": {
+    "vue": "3.5.42"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.2",
+    "@vitejs/plugin-vue": "6.0.8",
+    "electron": "44.3.0",
+    "electron-builder": "26.16.1",
+    "electron-vite": "5.0.0",
+    "typescript": "5.9.3",
+    "vite": "7.3.6",
+    "vue-tsc": "3.3.11"
+  }
+}

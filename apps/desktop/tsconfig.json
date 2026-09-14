@@ -1,0 +1,9 @@
+{
+  //表示这个配置本身不直接包含源码。
+  "files": [],
+  //表示桌面项目由两个 TypeScript 子项目组成
+  "references": [
+    { "path": "./tsconfig.node.json" },
+    { "path": "./tsconfig.web.json" }
+  ]
+}
