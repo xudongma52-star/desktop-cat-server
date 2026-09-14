@@ -1,0 +1,14 @@
+node_modules/
+dist/
+target/
+.pnpm-store/
+.m2/
+.logs/
+.idea/
+*.iml
+.env
+.env.local
+.env.*.local
+*.log
+Thumbs.db
+.DS_Store

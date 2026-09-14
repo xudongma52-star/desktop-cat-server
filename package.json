@@ -1,0 +1,12 @@
+{
+  "name": "desktop-cat",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@11.19.0",
+  "engines": { "node": ">=22.12.0" },
+  "scripts": {
+    "dev": "pnpm --filter @desktop-cat/web dev",
+    "build": "pnpm --filter @desktop-cat/web build",
+    "typecheck": "pnpm --filter @desktop-cat/web typecheck"
+  }
+}

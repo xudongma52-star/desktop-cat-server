@@ -1,0 +1,5 @@
+# The first scaffold runs without a database. Activate postgres to enable MyBatis.
+spring:
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
