@@ -1,24 +1,5 @@
-//主进程负责访问 Windows 系统能力。、
-/**
- * - existsSync：检查位置文件是否存在
- * - mkdirSync：创建用户数据目录
- * - readFileSync：读取上次窗口位置
- * - writeFileSync：保存窗口位置
- * - dirname：取得文件所在目录
- * - join：安全拼接路径
- */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-/**
- * app	Electron 程序生命周期
- * BrowserWindow	创建桌面窗口
- * ipcMain	接收 Vue 发来的 IPC 消息
- * Menu	创建托盘菜单
- * nativeImage	创建 Windows 能使用的图标
- * screen	获取显示器尺寸
- * Tray	创建系统托盘图标
- * Rectangle	显示器矩形区域的 TypeScript 类型
- */
 import {
   app,
   BrowserWindow,
@@ -29,39 +10,51 @@ import {
   Tray,
   type Rectangle,
 } from 'electron'
+import {
+  CAT_ACTIVITY_DEFINITIONS,
+  CAT_ACTIVITY_IDS,
+  isCatActivityId,
+  type CatActivityId,
+  type CatActivityRequestResult,
+  type CatActivitySnapshot,
+  type CatFacing,
+  type CatMovementMode,
+} from '../shared/cat-activity'
 
-//窗口常量小猫的大小
 const WINDOW_WIDTH = 220
 const WINDOW_HEIGHT = 220
 const MIN_VISIBLE_SIZE = 36
+const MOVEMENT_TICK_MS = 50
 
-//小猫窗口的位置
-type WindowPosition = {
-  x: number
-  y: number
+type WindowPosition = { x: number; y: number }
+type Velocity = { x: number; y: number }
+
+let catWindow: BrowserWindow | null = null
+let tray: Tray | null = null
+let isQuitting = false
+let savePositionTimer: NodeJS.Timeout | undefined
+let activityEndTimer: NodeJS.Timeout | undefined
+let movementTimer: NodeJS.Timeout | undefined
+let movementPaused = false
+let precisePosition: WindowPosition = { x: 0, y: 0 }
+let velocity: Velocity = { x: 0, y: 0 }
+let nextDirectionChangeAt = 0
+
+let currentActivity: CatActivitySnapshot = {
+  id: 'idle',
+  startedAt: Date.now(),
+  endsAt: Date.now(),
+  durationMinutes: 1,
+  facing: 'right',
 }
 
-//保存小猫对象
-let catWindow: BrowserWindow | null = null
-//保存托盘对象
-let tray: Tray | null = null
-//区分两种行为 1.用户关闭窗口 2.用户真要退出程序
-let isQuitting = false
-//保存位置时的防抖定时器
-let savePositionTimer: NodeJS.Timeout | undefined
-
-//获取文件地址
 function getWindowStatePath(): string {
-  //app.getPath('userData') 返回当前应用的用户数据目录。
   return join(app.getPath('userData'), 'window-state.json')
 }
 
-//文件保存位置
 function readSavedPosition(): WindowPosition | null {
   const statePath = getWindowStatePath()
-  if (!existsSync(statePath)) {
-    return null
-  }
+  if (!existsSync(statePath)) return null
 
   try {
     const candidate = JSON.parse(readFileSync(statePath, 'utf8')) as Partial<WindowPosition>
@@ -75,24 +68,18 @@ function readSavedPosition(): WindowPosition | null {
   return null
 }
 
-//检查窗口和屏幕是否相交
-//workArea 是显示器可用区域，通常已经排除了任务栏。
 function intersectsEnough(position: WindowPosition, workArea: Rectangle): boolean {
   const overlapWidth = Math.min(position.x + WINDOW_WIDTH, workArea.x + workArea.width)
     - Math.max(position.x, workArea.x)
   const overlapHeight = Math.min(position.y + WINDOW_HEIGHT, workArea.y + workArea.height)
     - Math.max(position.y, workArea.y)
-
   return overlapWidth >= MIN_VISIBLE_SIZE && overlapHeight >= MIN_VISIBLE_SIZE
 }
 
-//检查所有显示器
 function isPositionVisible(position: WindowPosition): boolean {
-  //some() 表示只要小猫在任意一个显示器里，就认为位置有效。
   return screen.getAllDisplays().some((display) => intersectsEnough(position, display.workArea))
 }
 
-//默认位置
 function getDefaultPosition(): WindowPosition {
   const { workArea } = screen.getPrimaryDisplay()
   return {
@@ -101,18 +88,13 @@ function getDefaultPosition(): WindowPosition {
   }
 }
 
-//决定启动位置
 function getInitialPosition(): WindowPosition {
   const savedPosition = readSavedPosition()
   return savedPosition && isPositionVisible(savedPosition) ? savedPosition : getDefaultPosition()
 }
 
-//保存位置
 function saveWindowPosition(): void {
-  if (!catWindow || catWindow.isDestroyed()) {
-    return
-  }
-//保存前确认窗口存在并且没有被销毁
+  if (!catWindow || catWindow.isDestroyed()) return
   const [x, y] = catWindow.getPosition()
   const statePath = getWindowStatePath()
 
@@ -124,58 +106,34 @@ function saveWindowPosition(): void {
   }
 }
 
-//保存位置防抖
-//拖动窗口时会产生很多 moved 事件。
-// 如果每次都写文件，会在一秒内写很多次。因此每次移动时取消旧任务，等用户停止移动 150 毫秒后再写一次。
 function schedulePositionSave(): void {
-  if (savePositionTimer) {
-    clearTimeout(savePositionTimer)
-  }
+  if (savePositionTimer) clearTimeout(savePositionTimer)
   savePositionTimer = setTimeout(saveWindowPosition, 150)
 }
 
-
-// 确保小猫没有跑出屏幕
 function ensureWindowIsVisible(): void {
-  if (!catWindow || catWindow.isDestroyed()) {
-    return
-  }
-
+  if (!catWindow || catWindow.isDestroyed()) return
   const [x, y] = catWindow.getPosition()
   if (!isPositionVisible({ x, y })) {
-    const defaultPosition = getDefaultPosition()
-    catWindow.setPosition(defaultPosition.x, defaultPosition.y)
+    const fallback = getDefaultPosition()
+    catWindow.setPosition(fallback.x, fallback.y)
+    precisePosition = fallback
   }
 }
 
-//显示小猫
 function showCat(): void {
   if (!catWindow || catWindow.isDestroyed()) {
     createCatWindow()
     return
   }
-
   ensureWindowIsVisible()
   catWindow.showInactive()
 }
 
 function createCatWindow(): void {
   const position = getInitialPosition()
-//创建窗口
-  /**
-   * show: false	页面加载好之前暂不显示，避免白屏闪烁
-   * frame: false	删除 Windows 标题栏
-   * transparent: true	支持透明背景
-   * resizable: false	禁止改变尺寸
-   * maximizable: false	禁止最大化
-   * minimizable: false	禁止最小化
-   * fullscreenable: false	禁止全屏
-   * alwaysOnTop: true	保持置顶
-   * skipTaskbar: true	不显示在任务栏
-   * hasShadow: false	不绘制矩形窗口阴影
-   * backgroundColor	完全透明 ARGB 颜色
-   * autoHideMenuBar	隐藏默认菜单栏
-   */
+  precisePosition = position
+
   catWindow = new BrowserWindow({
     width: WINDOW_WIDTH,
     height: WINDOW_HEIGHT,
@@ -202,23 +160,16 @@ function createCatWindow(): void {
   })
 
   catWindow.setMenu(null)
-
-  //页面准备好再显示
-  catWindow.once('ready-to-show', () => {
-    catWindow?.showInactive()
+  catWindow.once('ready-to-show', () => catWindow?.showInactive())
+  catWindow.on('moved', () => {
+    if (!movementTimer) schedulePositionSave()
   })
-
-  //监听移动 窗口每次移动后，触发防抖保存。
-  catWindow.on('moved', schedulePositionSave)
-
-  //关闭时隐藏
   catWindow.on('close', (event) => {
     if (!isQuitting) {
       event.preventDefault()
       catWindow?.hide()
     }
   })
-  //窗口销毁后清理引用
   catWindow.on('closed', () => {
     catWindow = null
   })
@@ -230,15 +181,156 @@ function createCatWindow(): void {
   }
 }
 
-//生成托盘图标
+function randomInteger(minimum: number, maximum: number): number {
+  return Math.floor(Math.random() * (maximum - minimum + 1)) + minimum
+}
+
+function chooseRandom<T>(items: readonly T[]): T {
+  return items[Math.floor(Math.random() * items.length)] as T
+}
+
+function createActivitySnapshot(activityId: CatActivityId): CatActivitySnapshot {
+  const definition = CAT_ACTIVITY_DEFINITIONS[activityId]
+  const durationMinutes = randomInteger(definition.minMinutes, definition.maxMinutes)
+  const startedAt = Date.now()
+  return {
+    id: activityId,
+    startedAt,
+    endsAt: startedAt + durationMinutes * 60_000,
+    durationMinutes,
+    facing: currentActivity.facing,
+  }
+}
+
+function broadcastActivity(): void {
+  if (!catWindow || catWindow.isDestroyed()) return
+  catWindow.webContents.send('desktop-cat:activity-changed', currentActivity)
+}
+
+function pickAutomaticActivity(): CatActivityId {
+  const choices = CAT_ACTIVITY_IDS.filter((activityId) => activityId !== currentActivity.id)
+  return chooseRandom(choices)
+}
+
+function clearActivityEndTimer(): void {
+  if (!activityEndTimer) return
+  clearTimeout(activityEndTimer)
+  activityEndTimer = undefined
+}
+
+function stopMovement(): void {
+  if (movementTimer) clearInterval(movementTimer)
+  movementTimer = undefined
+  velocity = { x: 0, y: 0 }
+  saveWindowPosition()
+}
+
+function setFacing(nextFacing: CatFacing): void {
+  if (currentActivity.facing === nextFacing) return
+  currentActivity = { ...currentActivity, facing: nextFacing }
+  broadcastActivity()
+}
+
+function chooseVelocity(mode: CatMovementMode): void {
+  const definition = CAT_ACTIVITY_DEFINITIONS[currentActivity.id]
+  const direction = Math.random() * Math.PI * 2
+  const speedPerTick = definition.speedPixelsPerSecond * MOVEMENT_TICK_MS / 1_000
+  const verticalScale = mode === 'run' ? 0.55 : 0.75
+
+  velocity = {
+    x: Math.cos(direction) * speedPerTick,
+    y: Math.sin(direction) * speedPerTick * verticalScale,
+  }
+
+  if (Math.abs(velocity.x) < speedPerTick * 0.35) {
+    velocity.x = speedPerTick * 0.35 * (Math.random() < 0.5 ? -1 : 1)
+  }
+
+  nextDirectionChangeAt = Date.now() + randomInteger(
+    mode === 'run' ? 3_000 : 6_000,
+    mode === 'run' ? 8_000 : 14_000,
+  )
+  setFacing(velocity.x < 0 ? 'left' : 'right')
+}
+
+function moveCatOneFrame(mode: CatMovementMode): void {
+  if (movementPaused || !catWindow || catWindow.isDestroyed() || !catWindow.isVisible()) return
+  if (Date.now() >= nextDirectionChangeAt) chooseVelocity(mode)
+
+  const { workArea } = screen.getDisplayMatching(catWindow.getBounds())
+  let nextX = precisePosition.x + velocity.x
+  let nextY = precisePosition.y + velocity.y
+  const minimumX = workArea.x
+  const maximumX = workArea.x + workArea.width - WINDOW_WIDTH
+  const minimumY = workArea.y
+  const maximumY = workArea.y + workArea.height - WINDOW_HEIGHT
+
+  if (nextX <= minimumX || nextX >= maximumX) {
+    nextX = Math.min(Math.max(nextX, minimumX), maximumX)
+    velocity.x *= -1
+    setFacing(velocity.x < 0 ? 'left' : 'right')
+  }
+  if (nextY <= minimumY || nextY >= maximumY) {
+    nextY = Math.min(Math.max(nextY, minimumY), maximumY)
+    velocity.y *= -1
+  }
+
+  precisePosition = { x: nextX, y: nextY }
+  catWindow.setPosition(Math.round(nextX), Math.round(nextY), false)
+}
+
+function startMovement(mode: CatMovementMode): void {
+  stopMovement()
+  if (mode === 'still') return
+
+  if (catWindow && !catWindow.isDestroyed()) {
+    const [x, y] = catWindow.getPosition()
+    precisePosition = { x, y }
+  }
+  chooseVelocity(mode)
+  movementTimer = setInterval(() => moveCatOneFrame(mode), MOVEMENT_TICK_MS)
+}
+
+function startActivity(activityId: CatActivityId): CatActivitySnapshot {
+  clearActivityEndTimer()
+  currentActivity = createActivitySnapshot(activityId)
+  startMovement(CAT_ACTIVITY_DEFINITIONS[activityId].movement)
+  broadcastActivity()
+
+  activityEndTimer = setTimeout(() => {
+    startActivity(pickAutomaticActivity())
+  }, currentActivity.endsAt - Date.now())
+  return currentActivity
+}
+
+function requestActivity(activityId: CatActivityId): CatActivityRequestResult {
+  const definition = CAT_ACTIVITY_DEFINITIONS[activityId]
+  if (Math.random() < definition.refusalChance) {
+    return {
+      accepted: false,
+      message: chooseRandom(definition.refusalMessages),
+      snapshot: currentActivity,
+    }
+  }
+
+  const snapshot = startActivity(activityId)
+  return {
+    accepted: true,
+    message: `${chooseRandom(definition.acceptedMessages)} 这次会持续 ${snapshot.durationMinutes} 分钟。`,
+    snapshot,
+  }
+}
+
+function isSenderCatWindow(sender: Electron.WebContents): boolean {
+  const senderWindow = BrowserWindow.fromWebContents(sender)
+  return Boolean(senderWindow && senderWindow === catWindow)
+}
+
 function createTrayIcon(): Electron.NativeImage {
   const size = 32
   const pixels = Buffer.alloc(size * size * 4)
-
   const setPixel = (x: number, y: number, red: number, green: number, blue: number, alpha = 255): void => {
-    if (x < 0 || y < 0 || x >= size || y >= size) {
-      return
-    }
+    if (x < 0 || y < 0 || x >= size || y >= size) return
     const offset = (y * size + x) * 4
     pixels[offset] = blue
     pixels[offset + 1] = green
@@ -251,13 +343,9 @@ function createTrayIcon(): Electron.NativeImage {
       const face = (x - 16) ** 2 + (y - 18) ** 2 <= 11 ** 2
       const leftEar = y >= 3 && y <= 13 && x >= 6 && x <= 15 - Math.floor((y - 3) / 2)
       const rightEar = y >= 3 && y <= 13 && x <= 25 && x >= 17 + Math.floor((y - 3) / 2)
-
-      if (face || leftEar || rightEar) {
-        setPixel(x, y, 39, 33, 35)
-      }
+      if (face || leftEar || rightEar) setPixel(x, y, 39, 33, 35)
     }
   }
-
   for (const [x, y] of [[12, 17], [20, 17]] as const) {
     setPixel(x, y, 243, 178, 57)
     setPixel(x, y + 1, 243, 178, 57)
@@ -265,16 +353,13 @@ function createTrayIcon(): Electron.NativeImage {
   setPixel(16, 21, 74, 61, 61)
   setPixel(15, 22, 118, 94, 86)
   setPixel(17, 22, 118, 94, 86)
-
   return nativeImage.createFromBitmap(pixels, { width: size, height: size })
 }
 
-//创建托盘菜单
 function createTray(): void {
   tray = new Tray(createTrayIcon())
   tray.setToolTip('猫的角落')
-
-  const menu = Menu.buildFromTemplate([
+  tray.setContextMenu(Menu.buildFromTemplate([
     { label: '显示小猫', click: showCat },
     { label: '隐藏小猫', click: () => catWindow?.hide() },
     { type: 'separator' },
@@ -285,49 +370,51 @@ function createTray(): void {
         app.quit()
       },
     },
-  ])
-
-  tray.setContextMenu(menu)
+  ]))
   tray.on('click', showCat)
 }
 
-//注册 IPC
 function registerIpcHandlers(): void {
   ipcMain.on('desktop-cat:set-ignore-mouse-events', (event, ignore: unknown) => {
-    if (typeof ignore !== 'boolean') {
-      return
-    }
-
-    const senderWindow = BrowserWindow.fromWebContents(event.sender)
-    if (!senderWindow || senderWindow !== catWindow) {
-      return
-    }
-
-    senderWindow.setIgnoreMouseEvents(ignore, { forward: ignore })
+    if (typeof ignore !== 'boolean' || !isSenderCatWindow(event.sender)) return
+    catWindow?.setIgnoreMouseEvents(ignore, { forward: ignore })
   })
 
   ipcMain.on('desktop-cat:move-window-by', (event, deltaX: unknown, deltaY: unknown) => {
     if (
-      typeof deltaX !== 'number'
-      || typeof deltaY !== 'number'
-      || !Number.isFinite(deltaX)
-      || !Number.isFinite(deltaY)
-      || Math.abs(deltaX) > WINDOW_WIDTH
-      || Math.abs(deltaY) > WINDOW_HEIGHT
-    ) {
-      return
-    }
+      typeof deltaX !== 'number' || typeof deltaY !== 'number'
+      || !Number.isFinite(deltaX) || !Number.isFinite(deltaY)
+      || Math.abs(deltaX) > WINDOW_WIDTH || Math.abs(deltaY) > WINDOW_HEIGHT
+      || !isSenderCatWindow(event.sender) || !catWindow
+    ) return
 
-    const senderWindow = BrowserWindow.fromWebContents(event.sender)
-    if (!senderWindow || senderWindow !== catWindow) {
-      return
+    const [currentX, currentY] = catWindow.getPosition()
+    precisePosition = {
+      x: currentX + Math.round(deltaX),
+      y: currentY + Math.round(deltaY),
     }
+    catWindow.setPosition(precisePosition.x, precisePosition.y)
+    schedulePositionSave()
+  })
 
-    const [currentX, currentY] = senderWindow.getPosition()
-    senderWindow.setPosition(
-      currentX + Math.round(deltaX),
-      currentY + Math.round(deltaY),
-    )
+  ipcMain.on('desktop-cat:set-movement-paused', (event, paused: unknown) => {
+    if (typeof paused !== 'boolean' || !isSenderCatWindow(event.sender)) return
+    movementPaused = paused
+    if (!paused && catWindow && !catWindow.isDestroyed()) {
+      const [x, y] = catWindow.getPosition()
+      precisePosition = { x, y }
+    }
+  })
+
+  ipcMain.handle('desktop-cat:get-activity', (event) => {
+    if (!isSenderCatWindow(event.sender)) throw new Error('Activity access denied.')
+    return currentActivity
+  })
+
+  ipcMain.handle('desktop-cat:request-activity', (event, activityId: unknown) => {
+    if (!isSenderCatWindow(event.sender)) throw new Error('Activity access denied.')
+    if (!isCatActivityId(activityId)) throw new Error('Unknown cat activity.')
+    return requestActivity(activityId)
   })
 }
 
@@ -337,13 +424,12 @@ if (!hasSingleInstanceLock) {
   app.quit()
 } else {
   app.on('second-instance', showCat)
-
   app.whenReady().then(() => {
     app.setAppUserModelId('com.desktopcat.corner')
     registerIpcHandlers()
     createCatWindow()
     createTray()
-
+    startActivity('idle')
     screen.on('display-removed', ensureWindowIsVisible)
     screen.on('display-metrics-changed', ensureWindowIsVisible)
   })
@@ -351,9 +437,9 @@ if (!hasSingleInstanceLock) {
 
 app.on('before-quit', () => {
   isQuitting = true
-  if (savePositionTimer) {
-    clearTimeout(savePositionTimer)
-  }
+  if (savePositionTimer) clearTimeout(savePositionTimer)
+  clearActivityEndTimer()
+  stopMovement()
   saveWindowPosition()
 })
 

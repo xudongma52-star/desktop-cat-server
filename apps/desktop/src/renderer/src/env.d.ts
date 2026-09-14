@@ -1,11 +1,24 @@
 /// <reference types="vite/client" />
 
-//定义 preload 暴露的 API 形状。
-interface DesktopCatApi {
-  setIgnoreMouseEvents(ignore: boolean): void
-  moveWindowBy(deltaX: number, deltaY: number): void
+import type {
+  CatActivityId,
+  CatActivityRequestResult,
+  CatActivitySnapshot,
+} from '../../shared/cat-activity'
+
+declare global {
+  interface DesktopCatApi {
+    setIgnoreMouseEvents(ignore: boolean): void
+    moveWindowBy(deltaX: number, deltaY: number): void
+    setMovementPaused(paused: boolean): void
+    getActivity(): Promise<CatActivitySnapshot>
+    requestActivity(activityId: CatActivityId): Promise<CatActivityRequestResult>
+    onActivityChanged(listener: (snapshot: CatActivitySnapshot) => void): () => void
+  }
+
+  interface Window {
+    desktopCat: DesktopCatApi
+  }
 }
 
-interface Window {
-  desktopCat: DesktopCatApi
-}
+export {}
