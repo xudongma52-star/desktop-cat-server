@@ -1,6 +1,7 @@
 package com.desktopcat.server.catprofile;
 
 import static org.hamcrest.Matchers.matchesPattern;
+import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
@@ -9,12 +10,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.desktopcat.server.events.AssistantEventStream;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 @SpringBootTest
@@ -26,6 +29,9 @@ class CatProfileControllerTest {
 
     @Autowired
     private ObjectMapper objectMapper;
+
+    @MockitoBean
+    private AssistantEventStream eventStream;
 
     @Test
     void readsUpdatesAndProtectsTheProfileFromStaleWrites() throws Exception {
@@ -48,6 +54,8 @@ class CatProfileControllerTest {
                 .andExpect(jsonPath("$.profileId").value(profileId))
                 .andExpect(jsonPath("$.catName").value("煤球"))
                 .andExpect(jsonPath("$.version").value(version + 1));
+
+        verify(eventStream).publishCatProfileUpdated(profileId, version + 1);
 
         mvc.perform(patch("/api/cat/profile/name")
                         .contentType(MediaType.APPLICATION_JSON)

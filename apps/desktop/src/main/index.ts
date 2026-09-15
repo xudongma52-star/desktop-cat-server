@@ -6,6 +6,7 @@ import {
   ipcMain,
   Menu,
   nativeImage,
+  powerMonitor,
   screen,
   Tray,
   type Rectangle,
@@ -29,8 +30,11 @@ const EXPANDED_WINDOW_WIDTH = 400
 const EXPANDED_WINDOW_HEIGHT = 230
 const MIN_VISIBLE_SIZE = 36
 const MOVEMENT_TICK_MS = 50
-const PROFILE_SYNC_INTERVAL_MS = 10_000
-const CAT_PROFILE_API_URL = `${process.env.DESKTOP_CAT_API_URL ?? 'http://127.0.0.1:8080'}/api/cat/profile`
+const PROFILE_RECONCILE_INTERVAL_MS = 5 * 60_000
+const PROFILE_EVENT_RETRY_DELAYS_MS = [1_000, 2_000, 5_000, 10_000, 30_000] as const
+const ASSISTANT_API_URL = process.env.DESKTOP_CAT_API_URL ?? 'http://127.0.0.1:8080'
+const CAT_PROFILE_API_URL = `${ASSISTANT_API_URL}/api/cat/profile`
+const ASSISTANT_EVENTS_API_URL = `${ASSISTANT_API_URL}/api/events`
 const DEFAULT_CAT_PROFILE: CatProfile = {
   profileId: 1,
   catName: '小饼干',
@@ -42,6 +46,8 @@ type WindowPosition = { x: number; y: number }
 type Velocity = { x: number; y: number }
 type ActivityPanelSide = 'left' | 'right'
 type CompanionState = { firstMetDate: string }
+type ServerEvent = { event: string; data: string }
+type CatProfileUpdatedEvent = { profileId: number; version: number }
 
 let catWindow: BrowserWindow | null = null
 let tray: Tray | null = null
@@ -57,7 +63,12 @@ let activityPanelSide: ActivityPanelSide = 'right'
 let isActivityPanelOpen = false
 let companionState: CompanionState | undefined
 let catProfile: CatProfile = DEFAULT_CAT_PROFILE
-let profileSyncTimer: NodeJS.Timeout | undefined
+let profileReconcileTimer: NodeJS.Timeout | undefined
+let profileEventReconnectTimer: NodeJS.Timeout | undefined
+let profileEventAbortController: AbortController | undefined
+let profileEventReconnectAttempt = 0
+let profileEventConnectionFailed = false
+let profileSyncInFlight: Promise<void> | undefined
 let profileSyncFailed = false
 
 let currentActivity: CatActivitySnapshot = {
@@ -110,7 +121,7 @@ function saveCatProfile(): void {
   }
 }
 
-async function syncCatProfile(): Promise<void> {
+async function performCatProfileSync(): Promise<void> {
   try {
     const response = await fetch(CAT_PROFILE_API_URL, { signal: AbortSignal.timeout(4_000) })
     if (!response.ok) throw new Error(`Cat profile request returned HTTP ${response.status}.`)
@@ -131,9 +142,137 @@ async function syncCatProfile(): Promise<void> {
   }
 }
 
+async function syncCatProfile(): Promise<void> {
+  if (profileSyncInFlight) return profileSyncInFlight
+  const currentSync = performCatProfileSync()
+  profileSyncInFlight = currentSync
+  try {
+    await currentSync
+  } finally {
+    if (profileSyncInFlight === currentSync) profileSyncInFlight = undefined
+  }
+}
+
+function parseServerEvent(block: string): ServerEvent | null {
+  let event = 'message'
+  const dataLines: string[] = []
+
+  for (const line of block.split(/\r?\n/)) {
+    if (line.startsWith(':')) continue
+    const separator = line.indexOf(':')
+    const field = separator < 0 ? line : line.slice(0, separator)
+    let value = separator < 0 ? '' : line.slice(separator + 1)
+    if (value.startsWith(' ')) value = value.slice(1)
+    if (field === 'event') event = value
+    if (field === 'data') dataLines.push(value)
+  }
+
+  return dataLines.length > 0 ? { event, data: dataLines.join('\n') } : null
+}
+
+function isCatProfileUpdatedEvent(value: unknown): value is CatProfileUpdatedEvent {
+  if (!value || typeof value !== 'object') return false
+  const candidate = value as Partial<CatProfileUpdatedEvent>
+  return Number.isSafeInteger(candidate.profileId) && (candidate.profileId ?? 0) > 0
+    && Number.isSafeInteger(candidate.version) && (candidate.version ?? -1) >= 0
+}
+
+async function handleServerEvent(serverEvent: ServerEvent): Promise<void> {
+  if (serverEvent.event !== 'cat-profile.updated') return
+  try {
+    const candidate: unknown = JSON.parse(serverEvent.data)
+    if (!isCatProfileUpdatedEvent(candidate)) throw new Error('Profile update event is invalid.')
+    if (candidate.profileId === catProfile.profileId && candidate.version > catProfile.version) {
+      await syncCatProfile()
+    }
+  } catch (error) {
+    console.warn('Ignored an invalid assistant server event.', error)
+  }
+}
+
+async function consumeServerEvents(response: Response): Promise<void> {
+  if (!response.body) throw new Error('Assistant event stream has no response body.')
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buffer += decoder.decode(value, { stream: true })
+
+    let separator = buffer.match(/\r?\n\r?\n/)
+    while (separator?.index !== undefined) {
+      const block = buffer.slice(0, separator.index)
+      buffer = buffer.slice(separator.index + separator[0].length)
+      const serverEvent = parseServerEvent(block)
+      if (serverEvent) await handleServerEvent(serverEvent)
+      separator = buffer.match(/\r?\n\r?\n/)
+    }
+  }
+}
+
+function scheduleProfileEventReconnect(): void {
+  if (isQuitting || profileEventReconnectTimer) return
+  const retryIndex = Math.min(profileEventReconnectAttempt, PROFILE_EVENT_RETRY_DELAYS_MS.length - 1)
+  const delay = PROFILE_EVENT_RETRY_DELAYS_MS[retryIndex]
+  profileEventReconnectAttempt += 1
+  profileEventReconnectTimer = setTimeout(() => {
+    profileEventReconnectTimer = undefined
+    void connectProfileEvents()
+  }, delay)
+}
+
+async function connectProfileEvents(): Promise<void> {
+  if (isQuitting || profileEventAbortController) return
+  const abortController = new AbortController()
+  profileEventAbortController = abortController
+
+  try {
+    const response = await fetch(ASSISTANT_EVENTS_API_URL, {
+      headers: { Accept: 'text/event-stream' },
+      signal: abortController.signal,
+    })
+    if (!response.ok) throw new Error(`Assistant event stream returned HTTP ${response.status}.`)
+    if (profileEventConnectionFailed) console.info('Assistant event stream reconnected.')
+    profileEventConnectionFailed = false
+    profileEventReconnectAttempt = 0
+
+    // Reconcile once after every connection so events missed while offline cannot leave stale state.
+    await syncCatProfile()
+    await consumeServerEvents(response)
+    if (!abortController.signal.aborted) throw new Error('Assistant event stream closed unexpectedly.')
+  } catch (error) {
+    if (!abortController.signal.aborted && !isQuitting) {
+      if (!profileEventConnectionFailed) {
+        console.warn('Assistant event stream is unavailable; retrying in the background.', error)
+      }
+      profileEventConnectionFailed = true
+    }
+  } finally {
+    if (profileEventAbortController === abortController) profileEventAbortController = undefined
+  }
+
+  if (!abortController.signal.aborted) scheduleProfileEventReconnect()
+}
+
+function reconnectProfileEvents(): void {
+  if (profileEventReconnectTimer) clearTimeout(profileEventReconnectTimer)
+  profileEventReconnectTimer = undefined
+  const previousConnection = profileEventAbortController
+  profileEventAbortController = undefined
+  previousConnection?.abort()
+  void syncCatProfile()
+  void connectProfileEvents()
+}
+
 function startCatProfileSync(): void {
   void syncCatProfile()
-  profileSyncTimer = setInterval(() => void syncCatProfile(), PROFILE_SYNC_INTERVAL_MS)
+  void connectProfileEvents()
+  profileReconcileTimer = setInterval(
+    () => void syncCatProfile(),
+    PROFILE_RECONCILE_INTERVAL_MS,
+  )
 }
 
 function toLocalDate(date: Date): string {
@@ -677,6 +816,7 @@ if (!hasSingleInstanceLock) {
     createTray()
     startActivity('idle')
     startCatProfileSync()
+    powerMonitor.on('resume', reconnectProfileEvents)
     screen.on('display-removed', ensureWindowIsVisible)
     screen.on('display-metrics-changed', ensureWindowIsVisible)
   })
@@ -685,7 +825,10 @@ if (!hasSingleInstanceLock) {
 app.on('before-quit', () => {
   isQuitting = true
   if (savePositionTimer) clearTimeout(savePositionTimer)
-  if (profileSyncTimer) clearInterval(profileSyncTimer)
+  if (profileReconcileTimer) clearInterval(profileReconcileTimer)
+  if (profileEventReconnectTimer) clearTimeout(profileEventReconnectTimer)
+  profileEventAbortController?.abort()
+  powerMonitor.removeListener('resume', reconnectProfileEvents)
   clearActivityEndTimer()
   stopMovement()
   saveWindowPosition()

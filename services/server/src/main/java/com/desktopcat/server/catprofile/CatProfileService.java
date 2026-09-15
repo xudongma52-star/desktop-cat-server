@@ -1,5 +1,6 @@
 package com.desktopcat.server.catprofile;
 
+import com.desktopcat.server.events.AssistantEventStream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -12,9 +13,11 @@ public class CatProfileService {
     private static final int MAX_CAT_NAME_LENGTH = 20;
 
     private final CatProfileRepository repository;
+    private final AssistantEventStream eventStream;
 
-    public CatProfileService(CatProfileRepository repository) {
+    public CatProfileService(CatProfileRepository repository, AssistantEventStream eventStream) {
         this.repository = repository;
+        this.eventStream = eventStream;
     }
 
     public CatProfileResponse getPrimaryProfile() {
@@ -66,6 +69,7 @@ public class CatProfileService {
                         + "versionBefore={} versionAfter={}",
                 updated.profileId(), codePointLength(current.catName()), codePointLength(updated.catName()),
                 current.version(), updated.version());
+        eventStream.publishCatProfileUpdated(updated.profileId(), updated.version());
         return CatProfileResponse.from(updated);
     }
 
