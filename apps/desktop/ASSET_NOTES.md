@@ -1,23 +1,32 @@
 # 桌面猫素材说明
 
-## Q 版黑猫
+## 二次元像素小黑猫
 
-最终资源：
+当前正式资源均为带透明通道的横向 8 帧精灵表：
 
-- `src/renderer/src/assets/cat/cat-running-v2.png`
-- `src/renderer/src/assets/cat/cat-sleeping-v2.png`
+- `src/renderer/src/assets/cat/cat-idle-pixel-v4.png`
+- `src/renderer/src/assets/cat/cat-sleep-pixel-v4.png`
+- `src/renderer/src/assets/cat/cat-groom-pixel-v4.png`
+- `src/renderer/src/assets/cat/cat-play-pixel-v4.png`
+- `src/renderer/src/assets/cat/cat-eat-pixel-v4.png`
+- `src/renderer/src/assets/cat/cat-walk-pixel-v4.png`
+- `src/renderer/src/assets/cat/cat-run-pixel-v4.png`
 
-两张图通过内置 ImageGen 生成。用户提供的照片只作为同一只宠物猫的身份参考，没有复制到仓库。角色固定特征为纯黑短毛、圆脸、短嘴、小黑鼻、厚爪和琥珀色圆眼。
+资源通过内置 ImageGen 的 `stylized-concept` 模式生成。用户照片没有复制到仓库；旧版、由照片衍生的猫图只作为身份参考。角色固定特征为纯黑短毛、圆脸、短嘴、小黑鼻、厚爪、粗尾巴和琥珀色圆眼。
 
-奔跑图的最终提示词重点：
+统一提示词要求：原创建模；96×96 逻辑像素网格；10–14 色有限色板；明显的 2×2 / 3×3 像素簇、阶梯轮廓、少量抖色和单像素眼睛高光；硬边；禁止抗锯齿、柔和渐变、写实毛发、3D 光泽、矢量曲线和 AI 插画式润色；8 个等宽单元横向排列；透明背景；相同机位、比例、光向和地面线。
 
-> Draw a highly stylized cartoon chibi version of the referenced real black cat: oversized round head, tiny plump body, short legs, thick paws, small triangular ears, thick tail and large amber eyes. Use clean 2D hand-drawn game-sprite styling, simplified shapes, smooth dark outlines, flat black and charcoal blocks, minimal fur detail, a running pose facing right, and a uniform #00FF00 background for extraction.
+各动作提示词：
 
-睡觉图的最终提示词重点：
+- `idle`：坐姿呼吸、眨眼、单耳轻弹、尾尖延迟卷动。
+- `sleeping`：蜷成月牙，胸腹真实起伏，耳朵与尾尖轻动。
+- `grooming`：抬前爪、伸舌舔爪两次、湿爪擦脸和耳后、放下前爪。
+- `playing`：压低前身、扭动后腰、抬爪拍击、小幅扑跃并落地。
+- `eating`：嗅冻干、低头咬取、咀嚼、舔嘴；冻干在入口后消失。
+- `walking`：四足四拍步态，肩胯轮换，头部反向补偿，尾巴延迟跟随。
+- `running`：接触、压缩、通过、伸展、腾空、落地；四肢、脊柱、头和尾巴逐帧联动。
 
-> Draw the sleeping state for exactly the same cartoon chibi black cat, matching the running asset's proportions, colors and 2D style. Curl the cat on its side with closed eyes, head on both front paws and tail around the body. Use the same simplified black and charcoal blocks and a uniform #00FF00 background for extraction.
-
-生成器没有稳定输出真实透明通道，因此先生成纯绿底图，再用 `scripts/process-cat-asset.ps1` 去除绿幕、裁剪透明边缘并缩放。最终资源均为 32 位透明 PNG，四角 alpha 为 0；原始 1536×1024 图片约 1.5 MB，最终单张约 190–200 KB。
+渲染端以 `steps(8)` 播放精灵表，并使用 `image-rendering: pixelated`。动作来自每一帧的身体姿态变化，不再对同一张图片做晃动来假装运动。
 
 ## 猫叫
 

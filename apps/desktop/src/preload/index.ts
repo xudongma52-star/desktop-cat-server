@@ -15,6 +15,9 @@ const desktopCatApi = {
   setMovementPaused(paused: boolean): void {
     ipcRenderer.send('desktop-cat:set-movement-paused', paused)
   },
+  setActivityPanelOpen(open: boolean): Promise<'left' | 'right'> {
+    return ipcRenderer.invoke('desktop-cat:set-activity-panel-open', open) as Promise<'left' | 'right'>
+  },
   getActivity(): Promise<CatActivitySnapshot> {
     return ipcRenderer.invoke('desktop-cat:get-activity') as Promise<CatActivitySnapshot>
   },

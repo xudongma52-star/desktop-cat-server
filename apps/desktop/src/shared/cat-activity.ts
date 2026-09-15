@@ -1,4 +1,4 @@
-export type CatActivityId = 'idle' | 'sleeping' | 'grooming' | 'playing' | 'walking' | 'running'
+export type CatActivityId = 'idle' | 'sleeping' | 'grooming' | 'playing' | 'eating' | 'walking' | 'running'
 
 export type CatMovementMode = 'still' | 'wander' | 'run'
 
@@ -61,6 +61,13 @@ export const CAT_ACTIVITY_DEFINITIONS: Record<CatActivityId, CatActivityDefiniti
     defaultMessage: '抓住那颗小毛球！', automaticMessage: '发现一颗毛球，开玩！',
     acceptedMessages: ['好耶，毛球在哪里？', '我要扑过去啦！'],
     refusalMessages: ['我先观察一下，不急着扑。'],
+  },
+  eating: {
+    id: 'eating', label: '吃冻干', icon: '◇', minMinutes: 1, maxMinutes: 3,
+    movement: 'still', speedPixelsPerSecond: 0, refusalChance: 0.08,
+    defaultMessage: '咔嚓咔嚓，冻干真香！', automaticMessage: '肚子咕噜叫，吃一颗冻干。',
+    acceptedMessages: ['闻到了！我要吃冻干。', '嗷呜一口，谢谢投喂～'],
+    refusalMessages: ['我刚吃饱，先把冻干留着。'],
   },
   walking: {
     id: 'walking', label: '散步', icon: '♧', minMinutes: 3, maxMinutes: 8,

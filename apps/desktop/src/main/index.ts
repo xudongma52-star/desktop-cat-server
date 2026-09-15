@@ -21,13 +21,16 @@ import {
   type CatMovementMode,
 } from '../shared/cat-activity'
 
-const WINDOW_WIDTH = 220
-const WINDOW_HEIGHT = 220
+const COMPACT_WINDOW_WIDTH = 176
+const COMPACT_WINDOW_HEIGHT = 176
+const EXPANDED_WINDOW_WIDTH = 400
+const EXPANDED_WINDOW_HEIGHT = 220
 const MIN_VISIBLE_SIZE = 36
 const MOVEMENT_TICK_MS = 50
 
 type WindowPosition = { x: number; y: number }
 type Velocity = { x: number; y: number }
+type ActivityPanelSide = 'left' | 'right'
 
 let catWindow: BrowserWindow | null = null
 let tray: Tray | null = null
@@ -39,6 +42,8 @@ let movementPaused = false
 let precisePosition: WindowPosition = { x: 0, y: 0 }
 let velocity: Velocity = { x: 0, y: 0 }
 let nextDirectionChangeAt = 0
+let activityPanelSide: ActivityPanelSide = 'right'
+let isActivityPanelOpen = false
 
 let currentActivity: CatActivitySnapshot = {
   id: 'idle',
@@ -68,10 +73,17 @@ function readSavedPosition(): WindowPosition | null {
   return null
 }
 
+function getCurrentWindowSize(): { width: number; height: number } {
+  return isActivityPanelOpen
+    ? { width: EXPANDED_WINDOW_WIDTH, height: EXPANDED_WINDOW_HEIGHT }
+    : { width: COMPACT_WINDOW_WIDTH, height: COMPACT_WINDOW_HEIGHT }
+}
+
 function intersectsEnough(position: WindowPosition, workArea: Rectangle): boolean {
-  const overlapWidth = Math.min(position.x + WINDOW_WIDTH, workArea.x + workArea.width)
+  const { width, height } = getCurrentWindowSize()
+  const overlapWidth = Math.min(position.x + width, workArea.x + workArea.width)
     - Math.max(position.x, workArea.x)
-  const overlapHeight = Math.min(position.y + WINDOW_HEIGHT, workArea.y + workArea.height)
+  const overlapHeight = Math.min(position.y + height, workArea.y + workArea.height)
     - Math.max(position.y, workArea.y)
   return overlapWidth >= MIN_VISIBLE_SIZE && overlapHeight >= MIN_VISIBLE_SIZE
 }
@@ -83,8 +95,8 @@ function isPositionVisible(position: WindowPosition): boolean {
 function getDefaultPosition(): WindowPosition {
   const { workArea } = screen.getPrimaryDisplay()
   return {
-    x: workArea.x + workArea.width - WINDOW_WIDTH - 16,
-    y: workArea.y + workArea.height - WINDOW_HEIGHT - 16,
+    x: workArea.x + workArea.width - COMPACT_WINDOW_WIDTH - 16,
+    y: workArea.y + workArea.height - COMPACT_WINDOW_HEIGHT - 16,
   }
 }
 
@@ -95,7 +107,11 @@ function getInitialPosition(): WindowPosition {
 
 function saveWindowPosition(): void {
   if (!catWindow || catWindow.isDestroyed()) return
-  const [x, y] = catWindow.getPosition()
+  let [x, y] = catWindow.getPosition()
+  if (isActivityPanelOpen) {
+    if (activityPanelSide === 'left') x += EXPANDED_WINDOW_WIDTH - COMPACT_WINDOW_WIDTH
+    y += EXPANDED_WINDOW_HEIGHT - COMPACT_WINDOW_HEIGHT
+  }
   const statePath = getWindowStatePath()
 
   try {
@@ -135,8 +151,8 @@ function createCatWindow(): void {
   precisePosition = position
 
   catWindow = new BrowserWindow({
-    width: WINDOW_WIDTH,
-    height: WINDOW_HEIGHT,
+    width: COMPACT_WINDOW_WIDTH,
+    height: COMPACT_WINDOW_HEIGHT,
     x: position.x,
     y: position.y,
     show: false,
@@ -179,6 +195,41 @@ function createCatWindow(): void {
   } else {
     void catWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
+}
+
+function setActivityPanelOpen(open: boolean): ActivityPanelSide {
+  if (!catWindow || catWindow.isDestroyed() || open === isActivityPanelOpen) {
+    return activityPanelSide
+  }
+
+  const bounds = catWindow.getBounds()
+  const { workArea } = screen.getDisplayMatching(bounds)
+  const extraWidth = EXPANDED_WINDOW_WIDTH - COMPACT_WINDOW_WIDTH
+  const extraHeight = EXPANDED_WINDOW_HEIGHT - COMPACT_WINDOW_HEIGHT
+
+  if (open) {
+    const roomOnRight = workArea.x + workArea.width - (bounds.x + COMPACT_WINDOW_WIDTH)
+    const roomOnLeft = bounds.x - workArea.x
+    activityPanelSide = roomOnRight >= extraWidth || roomOnRight >= roomOnLeft ? 'right' : 'left'
+
+    const desiredX = activityPanelSide === 'left' ? bounds.x - extraWidth : bounds.x
+    const desiredY = bounds.y - extraHeight
+    const x = Math.min(Math.max(desiredX, workArea.x), workArea.x + workArea.width - EXPANDED_WINDOW_WIDTH)
+    const y = Math.min(Math.max(desiredY, workArea.y), workArea.y + workArea.height - EXPANDED_WINDOW_HEIGHT)
+    isActivityPanelOpen = true
+    catWindow.setBounds({ x, y, width: EXPANDED_WINDOW_WIDTH, height: EXPANDED_WINDOW_HEIGHT })
+  } else {
+    const desiredX = activityPanelSide === 'left' ? bounds.x + extraWidth : bounds.x
+    const desiredY = bounds.y + extraHeight
+    const x = Math.min(Math.max(desiredX, workArea.x), workArea.x + workArea.width - COMPACT_WINDOW_WIDTH)
+    const y = Math.min(Math.max(desiredY, workArea.y), workArea.y + workArea.height - COMPACT_WINDOW_HEIGHT)
+    isActivityPanelOpen = false
+    catWindow.setBounds({ x, y, width: COMPACT_WINDOW_WIDTH, height: COMPACT_WINDOW_HEIGHT })
+  }
+
+  precisePosition = { x: catWindow.getBounds().x, y: catWindow.getBounds().y }
+  schedulePositionSave()
+  return activityPanelSide
 }
 
 function randomInteger(minimum: number, maximum: number): number {
@@ -261,9 +312,10 @@ function moveCatOneFrame(mode: CatMovementMode): void {
   let nextX = precisePosition.x + velocity.x
   let nextY = precisePosition.y + velocity.y
   const minimumX = workArea.x
-  const maximumX = workArea.x + workArea.width - WINDOW_WIDTH
+  const { width, height } = getCurrentWindowSize()
+  const maximumX = workArea.x + workArea.width - width
   const minimumY = workArea.y
-  const maximumY = workArea.y + workArea.height - WINDOW_HEIGHT
+  const maximumY = workArea.y + workArea.height - height
 
   if (nextX <= minimumX || nextX >= maximumX) {
     nextX = Math.min(Math.max(nextX, minimumX), maximumX)
@@ -384,7 +436,7 @@ function registerIpcHandlers(): void {
     if (
       typeof deltaX !== 'number' || typeof deltaY !== 'number'
       || !Number.isFinite(deltaX) || !Number.isFinite(deltaY)
-      || Math.abs(deltaX) > WINDOW_WIDTH || Math.abs(deltaY) > WINDOW_HEIGHT
+      || Math.abs(deltaX) > EXPANDED_WINDOW_WIDTH || Math.abs(deltaY) > EXPANDED_WINDOW_HEIGHT
       || !isSenderCatWindow(event.sender) || !catWindow
     ) return
 
@@ -404,6 +456,12 @@ function registerIpcHandlers(): void {
       const [x, y] = catWindow.getPosition()
       precisePosition = { x, y }
     }
+  })
+
+  ipcMain.handle('desktop-cat:set-activity-panel-open', (event, open: unknown) => {
+    if (!isSenderCatWindow(event.sender)) throw new Error('Activity panel access denied.')
+    if (typeof open !== 'boolean') throw new Error('Invalid activity panel state.')
+    return setActivityPanelOpen(open)
   })
 
   ipcMain.handle('desktop-cat:get-activity', (event) => {

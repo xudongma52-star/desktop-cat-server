@@ -11,6 +11,7 @@ declare global {
     setIgnoreMouseEvents(ignore: boolean): void
     moveWindowBy(deltaX: number, deltaY: number): void
     setMovementPaused(paused: boolean): void
+    setActivityPanelOpen(open: boolean): Promise<'left' | 'right'>
     getActivity(): Promise<CatActivitySnapshot>
     requestActivity(activityId: CatActivityId): Promise<CatActivityRequestResult>
     onActivityChanged(listener: (snapshot: CatActivitySnapshot) => void): () => void
