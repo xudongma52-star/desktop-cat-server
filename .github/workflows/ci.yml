@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend-and-desktop:
+    name: frontend-and-desktop
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+
+      - name: Install pnpm
+        run: npm install --global pnpm@11.19.0
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check and build web app
+        run: |
+          pnpm typecheck
+          pnpm build
+
+      - name: Check and build desktop app
+        run: |
+          pnpm typecheck:desktop
+          pnpm build:desktop
+
+  backend:
+    name: backend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up Java
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Test backend
+        working-directory: services/server
+        run: ./mvnw --batch-mode verify

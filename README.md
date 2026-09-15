@@ -1,5 +1,7 @@
 # 猫的角落 · 个人知识库与桌面猫
 
+[![CI](https://github.com/xudongma52-star/desktop-cat-server/actions/workflows/ci.yml/badge.svg)](https://github.com/xudongma52-star/desktop-cat-server/actions/workflows/ci.yml)
+
 Vue 3 + Electron + Spring Boot 3 + JDK 21，使用原生 MyBatis。当前已经有一条可运行的网页前后端链路，以及一个可独立运行的 Windows 桌面猫。
 
 ## 当前范围
@@ -159,3 +161,9 @@ $env:SPRING_PROFILES_ACTIVE = 'local'
 - 首次依赖下载需要网络；依赖解析后的前端版本固定在 `pnpm-lock.yaml` 中。
 
 完整规划见 [技术栈与架构](./桌面猫个人助手-技术栈与架构.md)。
+
+## 参与贡献
+
+日常开发汇总到 `dev`，稳定版本保存在 `main`。欢迎通过 Fork 创建功能分支，并向 `dev` 提交 Pull Request；具体流程见 [CONTRIBUTING.md](./CONTRIBUTING.md)。
+
+本项目采用 [MIT License](./LICENSE)。

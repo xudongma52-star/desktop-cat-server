@@ -1,0 +1,33 @@
+name: Bug 报告
+description: 报告可以稳定复现的问题
+title: "[Bug] "
+labels:
+  - bug
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: 问题描述
+      description: 实际发生了什么？
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      description: 请按顺序写出复现方式。
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 预期结果
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: 运行环境
+      placeholder: Windows 11、JDK 21、Node.js 24
+    validations:
+      required: true

@@ -1,0 +1,25 @@
+name: 功能建议
+description: 提议新的陪伴、记录或知识库能力
+title: "[Feature] "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: scenario
+    attributes:
+      label: 使用场景
+      description: 你希望在什么情况下使用这个功能？
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 期望行为
+      description: 请描述你希望看到的交互或结果。
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: 补充信息
+      description: 可以填写草图、参考项目或实现想法。
