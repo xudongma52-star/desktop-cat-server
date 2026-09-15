@@ -1,10 +1,14 @@
 spring:
   datasource:
-    url: ${DB_URL:jdbc:postgresql://127.0.0.1:5432/desktop_cat}
-    username: ${DB_USERNAME:desktop_cat}
-    password: ${DB_PASSWORD}
+    url: ${DB_URL:jdbc:postgresql://127.0.0.1:5432/postgres}
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:postgres}
     hikari:
       maximum-pool-size: 5
+      schema: public
+  flyway:
+    default-schema: public
+    schemas: public
 
 mybatis:
   mapper-locations: classpath:/mappers/*.xml

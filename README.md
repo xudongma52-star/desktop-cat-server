@@ -6,7 +6,7 @@ Vue 3 + Electron + Spring Boot 3 + JDK 21，使用原生 MyBatis。当前已经�
 
 - 已建立 Vue、TypeScript、Vite、Router 和 Pinia 前端基础。
 - 已建立 Spring Boot 3.5.16 后端，加入 Validation、Actuator、MyBatis Starter 3.0.5 和 PostgreSQL 驱动。
-- 默认 `local` 配置不启动数据源，可以直接体验前后端联通。
+- 默认连接本机 PostgreSQL；应用启动时由 Flyway 自动建表。需要脱离数据库开发时可显式启用 `local` 配置。
 - 已建立 Electron 桌面端：透明无边框窗口、置顶显示、透明区域鼠标穿透、拖动、真实猫叫、活动状态、自由移动、主动陪伴对话、托盘显隐与退出、窗口位置记忆和 Windows 安装包。
 - 当前 Q 版黑猫根据自己的猫照片生成，保留纯黑毛、圆脸、厚爪与琥珀眼；多组透明 PNG 精灵图配合 CSS 表现发呆、睡觉、舔毛、玩耍、吃冻干、散步和奔跑七种活动。
 - 已完成第一张业务表 `cat_profile`、Flyway 迁移和原生 MyBatis XML，可在网页修改小猫名字，并由 Electron 定时同步和离线缓存。
@@ -28,7 +28,7 @@ cd D:\repository
 pnpm install
 ```
 
-打开第一个终端，启动后端：
+确认本机 PostgreSQL 已启动，默认连接参数为 `127.0.0.1:5432/postgres`、用户 `postgres`、密码 `postgres`。打开第一个终端，启动后端：
 
 ```powershell
 cd D:\repository\services\server
@@ -120,24 +120,33 @@ cd services\server
 
 2026-09-15 已更新桌面猫的时段陪伴对话、触摸回应与活动文案，并移除界面中的倒计时、活动时长和奔跑速度线；桌面端 Node 与 Vue 类型检查、生产构建均已通过。
 
-## 以后连接 PostgreSQL
+## PostgreSQL 连接配置
 
-准备好数据库后，在启动后端的终端设置：
+默认配置可直接连接当前本机数据库：
+
+```text
+jdbc:postgresql://127.0.0.1:5432/postgres
+username: postgres
+password: postgres
+```
+
+需要覆盖默认配置时，在启动后端的终端设置：
 
 ```powershell
 $env:SPRING_PROFILES_ACTIVE = 'postgres'
-$env:DB_URL = 'jdbc:postgresql://127.0.0.1:5432/desktop_cat'
-$env:DB_USERNAME = 'desktop_cat'
+$env:DB_URL = 'jdbc:postgresql://127.0.0.1:5432/postgres'
+$env:DB_USERNAME = 'postgres'
 $env:DB_PASSWORD = '替换为本地数据库密码'
 .\mvnw.cmd spring-boot:run
 ```
 
-不要把真实密码提交到仓库。首次以 `postgres` 配置启动时，Flyway 会创建 `cat_profile` 表并写入主资料；所有主键使用带业务含义的 `profile_id`，不使用裸 `id`。
+服务器部署时必须通过环境变量提供真实密码，不要把服务器密码提交到仓库。应用首次启动时，Flyway 会在目标数据库创建 `cat_profile` 表、`flyway_schema_history` 表并写入主资料；所有主键使用带业务含义的 `profile_id`，不使用裸 `id`。
 
-回到默认模式时，打开新的终端或移除配置：
+需要临时使用不连接数据库的内存模式时：
 
 ```powershell
-Remove-Item Env:SPRING_PROFILES_ACTIVE -ErrorAction SilentlyContinue
+$env:SPRING_PROFILES_ACTIVE = 'local'
+.\mvnw.cmd spring-boot:run
 ```
 
 ## 常见问题

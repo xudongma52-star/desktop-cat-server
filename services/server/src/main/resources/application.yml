@@ -6,7 +6,7 @@ spring:
   application:
     name: desktop-cat-server
   profiles:
-    default: local
+    default: postgres
 
 logging:
   pattern:
