@@ -368,7 +368,7 @@ function requestActivity(activityId: CatActivityId): CatActivityRequestResult {
   const snapshot = startActivity(activityId)
   return {
     accepted: true,
-    message: `${chooseRandom(definition.acceptedMessages)} 这次会持续 ${snapshot.durationMinutes} 分钟。`,
+    message: chooseRandom(definition.acceptedMessages),
     snapshot,
   }
 }

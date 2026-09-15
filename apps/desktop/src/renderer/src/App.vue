@@ -6,6 +6,7 @@ import {
   type CatActivityId,
   type CatActivitySnapshot,
 } from '../../shared/cat-activity'
+import { getAmbientMessages, TOUCH_MESSAGES } from './cat-dialogue'
 import eatingCatUrl from './assets/cat/cat-eat-pixel-v5.png'
 import groomingCatUrl from './assets/cat/cat-groom-pixel-v5.png'
 import idleCatUrl from './assets/cat/cat-idle-pixel-v5.png'
@@ -32,8 +33,7 @@ const activity = ref<CatActivitySnapshot>({
   durationMinutes: 1,
   facing: 'right',
 })
-const message = ref(CAT_ACTIVITY_DEFINITIONS.idle.defaultMessage)
-const now = ref(Date.now())
+const message = ref('我来啦，今天也陪着你。')
 const isReacting = ref(false)
 const isDragging = ref(false)
 const isActivityMenuOpen = ref(false)
@@ -45,17 +45,11 @@ const decisionMessage = ref('选一个活动，看看小猫愿不愿意。')
 const currentDefinition = computed(() => CAT_ACTIVITY_DEFINITIONS[activity.value.id])
 const catImageUrl = computed(() => catSpriteUrls[activity.value.id])
 const catLabel = computed(() => `正在${currentDefinition.value.label}的黑色小猫`)
-const remainingSeconds = computed(() => Math.max(0, Math.ceil((activity.value.endsAt - now.value) / 1_000)))
-const remainingLabel = computed(() => {
-  const minutes = Math.floor(remainingSeconds.value / 60)
-  const seconds = remainingSeconds.value % 60
-  return `${minutes}:${seconds.toString().padStart(2, '0')}`
-})
 
 let meowAudio: HTMLAudioElement | null = null
-let clockTimer: number | undefined
 let reactionTimer: number | undefined
 let messageTimer: number | undefined
+let conversationTimer: number | undefined
 let closeMenuTimer: number | undefined
 let removeActivityListener: (() => void) | undefined
 let isIgnoringMouseEvents = false
@@ -67,6 +61,10 @@ let lastPointerScreenY = 0
 let suppressNextClick = false
 
 const DRAG_THRESHOLD_PX = 4
+const MIN_CONVERSATION_DELAY_MS = 16_000
+const MAX_CONVERSATION_DELAY_MS = 32_000
+const RECENT_MESSAGE_LIMIT = 5
+const recentMessages: string[] = []
 
 function setMousePassThrough(ignore: boolean): void {
   if (ignore === isIgnoringMouseEvents) return
@@ -100,21 +98,57 @@ function clearMessageTimer(): void {
   messageTimer = undefined
 }
 
-function showTemporaryMessage(nextMessage: string): void {
+function clearConversationTimer(): void {
+  if (!conversationTimer) return
+  window.clearTimeout(conversationTimer)
+  conversationTimer = undefined
+}
+
+function pickDialogue(candidates: readonly string[]): string {
+  const unseenMessages = candidates.filter((candidate) => !recentMessages.includes(candidate))
+  const pool = unseenMessages.length > 0 ? unseenMessages : candidates
+  const nextMessage = pool[Math.floor(Math.random() * pool.length)]
+  recentMessages.push(nextMessage)
+  if (recentMessages.length > RECENT_MESSAGE_LIMIT) recentMessages.shift()
+  return nextMessage
+}
+
+function pickAmbientMessage(): string {
+  return pickDialogue(getAmbientMessages())
+}
+
+function scheduleConversation(delayMs?: number): void {
+  clearConversationTimer()
+  const nextDelay = delayMs ?? Math.floor(
+    MIN_CONVERSATION_DELAY_MS + Math.random() * (MAX_CONVERSATION_DELAY_MS - MIN_CONVERSATION_DELAY_MS),
+  )
+  conversationTimer = window.setTimeout(() => {
+    conversationTimer = undefined
+    if (!isActivityMenuOpen.value && !isDragging.value && !isRequestingActivity.value) {
+      clearMessageTimer()
+      message.value = pickAmbientMessage()
+    }
+    scheduleConversation()
+  }, nextDelay)
+}
+
+function showTemporaryMessage(nextMessage: string, holdMs = 4_800): void {
   clearMessageTimer()
+  clearConversationTimer()
   message.value = nextMessage
   messageTimer = window.setTimeout(() => {
-    message.value = currentDefinition.value.defaultMessage
-  }, 3_200)
+    messageTimer = undefined
+    message.value = pickAmbientMessage()
+    scheduleConversation()
+  }, holdMs)
 }
 
 function applyActivitySnapshot(nextActivity: CatActivitySnapshot): void {
   const activityChanged = nextActivity.id !== activity.value.id
     || nextActivity.startedAt !== activity.value.startedAt
   activity.value = nextActivity
-  now.value = Date.now()
   if (activityChanged && !isRequestingActivity.value) {
-    showTemporaryMessage(CAT_ACTIVITY_DEFINITIONS[nextActivity.id].automaticMessage)
+    showTemporaryMessage(pickDialogue(CAT_ACTIVITY_DEFINITIONS[nextActivity.id].automaticMessages))
   }
 }
 
@@ -170,7 +204,10 @@ function reactToTouch(): void {
   playMeow()
   isReacting.value = false
   if (reactionTimer) window.clearTimeout(reactionTimer)
-  showTemporaryMessage('喵～ 摸到了！')
+  const touchMessage = pickDialogue(TOUCH_MESSAGES)
+  decisionKind.value = 'accepted'
+  decisionMessage.value = touchMessage
+  showTemporaryMessage(touchMessage, 6_000)
   window.requestAnimationFrame(() => {
     isReacting.value = true
   })
@@ -236,18 +273,16 @@ function finishCatDrag(event: PointerEvent): void {
 onMounted(async () => {
   window.addEventListener('mousemove', handleMouseMove)
   window.addEventListener('mouseleave', handleMouseLeave)
-  clockTimer = window.setInterval(() => {
-    now.value = Date.now()
-  }, 1_000)
   removeActivityListener = window.desktopCat.onActivityChanged(applyActivitySnapshot)
 
   try {
-    applyActivitySnapshot(await window.desktopCat.getActivity())
-    message.value = currentDefinition.value.defaultMessage
+    activity.value = await window.desktopCat.getActivity()
+    message.value = pickAmbientMessage()
   } catch (error) {
     console.error('Failed to load the current cat activity.', error)
-    message.value = '我刚刚走神了，再等等我～'
+    message.value = '我刚刚走神了一小会儿，现在回来陪你啦。'
   }
+  scheduleConversation(8_000)
 })
 
 onBeforeUnmount(() => {
@@ -256,10 +291,10 @@ onBeforeUnmount(() => {
   removeActivityListener?.()
   window.desktopCat.setMovementPaused(false)
   if (isActivityMenuOpen.value) void window.desktopCat.setActivityPanelOpen(false)
-  if (clockTimer) window.clearInterval(clockTimer)
   if (reactionTimer) window.clearTimeout(reactionTimer)
   if (closeMenuTimer) window.clearTimeout(closeMenuTimer)
   clearMessageTimer()
+  clearConversationTimer()
   if (meowAudio) {
     meowAudio.pause()
     meowAudio.src = ''
@@ -275,7 +310,7 @@ onBeforeUnmount(() => {
     <div class="cat-stage">
       <p v-if="!isActivityMenuOpen" class="speech" role="status" data-interactive title="按住气泡拖动小猫">
         <span>{{ message }}</span>
-        <small>{{ currentDefinition.icon }} {{ currentDefinition.label }} · {{ remainingLabel }}</small>
+        <small>{{ currentDefinition.icon }} {{ currentDefinition.label }}</small>
       </p>
 
       <div v-if="!isActivityMenuOpen" class="drag-handle" data-interactive title="按住这里拖动小猫" />
@@ -300,7 +335,6 @@ onBeforeUnmount(() => {
         </span>
       </button>
 
-      <div v-if="activity.id === 'running'" class="speed-lines" aria-hidden="true"><i /><i /><i /></div>
       <div v-if="activity.id === 'sleeping'" class="sleep-marks" aria-hidden="true"><i>z</i><i>Z</i></div>
       <div v-if="activity.id === 'grooming'" class="activity-mark grooming-mark" aria-hidden="true">✦</div>
       <div v-if="activity.id === 'playing'" class="activity-mark play-ball" aria-hidden="true" />
@@ -326,11 +360,10 @@ onBeforeUnmount(() => {
           @click="chooseActivity(option.id)"
         >
           <span>{{ option.icon }} {{ option.label }}</span>
-          <small>{{ option.minMinutes }}–{{ option.maxMinutes }} 分钟</small>
         </button>
       </div>
 
-      <button class="pet-button" type="button" @click="reactToTouch">摸摸它，暂时不换活动</button>
+      <button class="pet-button" type="button" @click="reactToTouch">摸摸它，听它说句话</button>
     </section>
   </main>
 </template>
@@ -479,28 +512,6 @@ onBeforeUnmount(() => {
 .cat-button.reacting .cat-sprite-viewport { animation: touch-pop 480ms cubic-bezier(.2, .85, .3, 1); }
 .cat-button.dragging .cat-sprite-sheet { animation-play-state: paused; }
 
-.speed-lines {
-  position: absolute;
-  z-index: 2;
-  bottom: 48px;
-  left: 7px;
-  width: 38px;
-  pointer-events: none;
-}
-
-.speed-lines i {
-  display: block;
-  width: 25px;
-  height: 2px;
-  margin-top: 8px;
-  border-radius: 2px;
-  background: rgb(238 179 74 / 52%);
-  animation: speed-line 760ms ease-out infinite;
-}
-
-.speed-lines i:nth-child(2) { width: 35px; animation-delay: -240ms; }
-.speed-lines i:nth-child(3) { width: 19px; animation-delay: -480ms; }
-
 .sleep-marks {
   position: absolute;
   z-index: 5;
@@ -559,8 +570,8 @@ onBeforeUnmount(() => {
 
 .activity-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px; }
 .activity-grid button {
-  display: grid;
-  gap: 1px;
+  display: flex;
+  align-items: center;
   min-height: 27px;
   padding: 2px 6px;
   border: 1px solid #ead2b4;
@@ -574,7 +585,6 @@ onBeforeUnmount(() => {
 .activity-grid button.current { border-color: #d69c55; box-shadow: inset 0 0 0 1px #efd1a8; }
 .activity-grid button:disabled { cursor: wait; opacity: .62; }
 .activity-grid span { font-size: 10px; font-weight: 700; }
-.activity-grid small { color: #9a7d69; font-size: 7px; }
 
 .pet-button {
   width: 100%;
@@ -590,7 +600,6 @@ onBeforeUnmount(() => {
 
 @keyframes sprite-cycle { to { transform: translateX(-100%); } }
 @keyframes touch-pop { 0% { transform: translateY(0) scale(1); } 45% { transform: translateY(-10px) scale(1.04) rotate(-2deg); } 75% { transform: translateY(-3px) scale(.99) rotate(1deg); } 100% { transform: translateY(0) scale(1); } }
-@keyframes speed-line { from { transform: translateX(18px) scaleX(.45); opacity: 0; } 35% { opacity: .8; } to { transform: translateX(-8px) scaleX(1); opacity: 0; } }
 @keyframes float-z { 0%, 100% { transform: translate(0, 3px) scale(.9); opacity: .25; } 50% { transform: translate(4px, -5px) scale(1.08); opacity: 1; } }
 @keyframes sparkle { 0%, 100% { transform: scale(.7) rotate(0); opacity: .35; } 50% { transform: scale(1.1) rotate(25deg); opacity: 1; } }
 @keyframes ball-hop { 0%, 100% { transform: translate(0, 0) rotate(0); } 50% { transform: translate(-16px, -17px) rotate(160deg); } }
@@ -598,7 +607,6 @@ onBeforeUnmount(() => {
 
 @media (prefers-reduced-motion: reduce) {
   .cat-sprite-sheet,
-  .speed-lines i,
   .sleep-marks i,
   .activity-mark { animation: none !important; }
 }
