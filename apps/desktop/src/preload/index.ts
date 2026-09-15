@@ -5,6 +5,7 @@ import type {
   CatActivitySnapshot,
 } from '../shared/cat-activity'
 import type { CompanionInfo } from '../shared/companion'
+import type { CatProfile } from '../shared/cat-profile'
 
 const desktopCatApi = {
   setIgnoreMouseEvents(ignore: boolean): void {
@@ -25,6 +26,9 @@ const desktopCatApi = {
   getCompanionInfo(): Promise<CompanionInfo> {
     return ipcRenderer.invoke('desktop-cat:get-companion-info') as Promise<CompanionInfo>
   },
+  getCatProfile(): Promise<CatProfile> {
+    return ipcRenderer.invoke('desktop-cat:get-profile') as Promise<CatProfile>
+  },
   requestActivity(activityId: CatActivityId): Promise<CatActivityRequestResult> {
     return ipcRenderer.invoke('desktop-cat:request-activity', activityId) as Promise<CatActivityRequestResult>
   },
@@ -32,6 +36,11 @@ const desktopCatApi = {
     const wrappedListener = (_event: IpcRendererEvent, snapshot: CatActivitySnapshot): void => listener(snapshot)
     ipcRenderer.on('desktop-cat:activity-changed', wrappedListener)
     return () => ipcRenderer.removeListener('desktop-cat:activity-changed', wrappedListener)
+  },
+  onCatProfileChanged(listener: (profile: CatProfile) => void): () => void {
+    const wrappedListener = (_event: IpcRendererEvent, profile: CatProfile): void => listener(profile)
+    ipcRenderer.on('desktop-cat:profile-changed', wrappedListener)
+    return () => ipcRenderer.removeListener('desktop-cat:profile-changed', wrappedListener)
   },
 }
 

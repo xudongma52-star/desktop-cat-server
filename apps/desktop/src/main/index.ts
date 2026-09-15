@@ -21,6 +21,7 @@ import {
   type CatMovementMode,
 } from '../shared/cat-activity'
 import type { CompanionInfo } from '../shared/companion'
+import type { CatProfile } from '../shared/cat-profile'
 
 const COMPACT_WINDOW_WIDTH = 176
 const COMPACT_WINDOW_HEIGHT = 176
@@ -28,6 +29,14 @@ const EXPANDED_WINDOW_WIDTH = 400
 const EXPANDED_WINDOW_HEIGHT = 230
 const MIN_VISIBLE_SIZE = 36
 const MOVEMENT_TICK_MS = 50
+const PROFILE_SYNC_INTERVAL_MS = 10_000
+const CAT_PROFILE_API_URL = `${process.env.DESKTOP_CAT_API_URL ?? 'http://127.0.0.1:8080'}/api/cat/profile`
+const DEFAULT_CAT_PROFILE: CatProfile = {
+  profileId: 1,
+  catName: '小饼干',
+  version: 0,
+  updatedAt: new Date(0).toISOString(),
+}
 
 type WindowPosition = { x: number; y: number }
 type Velocity = { x: number; y: number }
@@ -47,6 +56,9 @@ let nextDirectionChangeAt = 0
 let activityPanelSide: ActivityPanelSide = 'right'
 let isActivityPanelOpen = false
 let companionState: CompanionState | undefined
+let catProfile: CatProfile = DEFAULT_CAT_PROFILE
+let profileSyncTimer: NodeJS.Timeout | undefined
+let profileSyncFailed = false
 
 let currentActivity: CatActivitySnapshot = {
   id: 'idle',
@@ -62,6 +74,66 @@ function getWindowStatePath(): string {
 
 function getCompanionStatePath(): string {
   return join(app.getPath('userData'), 'companion-state.json')
+}
+
+function getCatProfilePath(): string {
+  return join(app.getPath('userData'), 'cat-profile.json')
+}
+
+function isCatProfile(value: unknown): value is CatProfile {
+  if (!value || typeof value !== 'object') return false
+  const candidate = value as Partial<CatProfile>
+  return Number.isSafeInteger(candidate.profileId) && (candidate.profileId ?? 0) > 0
+    && typeof candidate.catName === 'string' && candidate.catName.trim().length > 0
+    && Number.isSafeInteger(candidate.version) && (candidate.version ?? -1) >= 0
+    && typeof candidate.updatedAt === 'string'
+}
+
+function loadCatProfile(): void {
+  const profilePath = getCatProfilePath()
+  if (!existsSync(profilePath)) return
+  try {
+    const candidate: unknown = JSON.parse(readFileSync(profilePath, 'utf8'))
+    if (isCatProfile(candidate)) catProfile = candidate
+  } catch (error) {
+    console.error('Failed to read the cached cat profile.', error)
+  }
+}
+
+function saveCatProfile(): void {
+  const profilePath = getCatProfilePath()
+  try {
+    mkdirSync(dirname(profilePath), { recursive: true })
+    writeFileSync(profilePath, JSON.stringify(catProfile, null, 2), 'utf8')
+  } catch (error) {
+    console.error('Failed to save the cached cat profile.', error)
+  }
+}
+
+async function syncCatProfile(): Promise<void> {
+  try {
+    const response = await fetch(CAT_PROFILE_API_URL, { signal: AbortSignal.timeout(4_000) })
+    if (!response.ok) throw new Error(`Cat profile request returned HTTP ${response.status}.`)
+    const candidate: unknown = await response.json()
+    if (!isCatProfile(candidate)) throw new Error('Cat profile response is invalid.')
+
+    const changed = candidate.version !== catProfile.version || candidate.catName !== catProfile.catName
+    catProfile = candidate
+    if (changed) {
+      saveCatProfile()
+      catWindow?.webContents.send('desktop-cat:profile-changed', catProfile)
+    }
+    if (profileSyncFailed) console.info('Cat profile synchronization recovered.')
+    profileSyncFailed = false
+  } catch (error) {
+    if (!profileSyncFailed) console.warn('Cat profile synchronization is unavailable; using cached data.', error)
+    profileSyncFailed = true
+  }
+}
+
+function startCatProfileSync(): void {
+  void syncCatProfile()
+  profileSyncTimer = setInterval(() => void syncCatProfile(), PROFILE_SYNC_INTERVAL_MS)
 }
 
 function toLocalDate(date: Date): string {
@@ -578,6 +650,11 @@ function registerIpcHandlers(): void {
     return getCompanionInfo()
   })
 
+  ipcMain.handle('desktop-cat:get-profile', (event) => {
+    if (!isSenderCatWindow(event.sender)) throw new Error('Cat profile access denied.')
+    return catProfile
+  })
+
   ipcMain.handle('desktop-cat:request-activity', (event, activityId: unknown) => {
     if (!isSenderCatWindow(event.sender)) throw new Error('Activity access denied.')
     if (!isCatActivityId(activityId)) throw new Error('Unknown cat activity.')
@@ -595,9 +672,11 @@ if (!hasSingleInstanceLock) {
     app.setAppUserModelId('com.desktopcat.corner')
     registerIpcHandlers()
     loadCompanionState()
+    loadCatProfile()
     createCatWindow()
     createTray()
     startActivity('idle')
+    startCatProfileSync()
     screen.on('display-removed', ensureWindowIsVisible)
     screen.on('display-metrics-changed', ensureWindowIsVisible)
   })
@@ -606,6 +685,7 @@ if (!hasSingleInstanceLock) {
 app.on('before-quit', () => {
   isQuitting = true
   if (savePositionTimer) clearTimeout(savePositionTimer)
+  if (profileSyncTimer) clearInterval(profileSyncTimer)
   clearActivityEndTimer()
   stopMovement()
   saveWindowPosition()

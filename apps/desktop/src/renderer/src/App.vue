@@ -16,7 +16,7 @@ import sleepingCatUrl from './assets/cat/cat-sleep-pixel-v5.png'
 import walkingCatUrl from './assets/cat/cat-walk-pixel-v5.png'
 import meowUrl from './assets/audio/happy-cat-meow.mp3'
 
-const CAT_NAME = '小饼干'
+const catName = ref('小饼干')
 const activityOptions = CAT_ACTIVITY_IDS.map((activityId) => CAT_ACTIVITY_DEFINITIONS[activityId])
 const catSpriteUrls: Record<CatActivityId, string> = {
   idle: idleCatUrl,
@@ -42,11 +42,11 @@ const isActivityMenuOpen = ref(false)
 const activityPanelSide = ref<'left' | 'right'>('right')
 const isRequestingActivity = ref(false)
 const decisionKind = ref<'none' | 'accepted' | 'refused' | 'error'>('none')
-const decisionMessage = ref(`选一个活动，看看${CAT_NAME}愿不愿意。`)
+const decisionMessage = ref(`选一个活动，看看${catName.value}愿不愿意。`)
 
 const currentDefinition = computed(() => CAT_ACTIVITY_DEFINITIONS[activity.value.id])
 const catImageUrl = computed(() => catSpriteUrls[activity.value.id])
-const catLabel = computed(() => `正在${currentDefinition.value.label}的${CAT_NAME}`)
+const catLabel = computed(() => `正在${currentDefinition.value.label}的${catName.value}`)
 
 let meowAudio: HTMLAudioElement | null = null
 let reactionTimer: number | undefined
@@ -55,6 +55,7 @@ let conversationTimer: number | undefined
 let closeMenuTimer: number | undefined
 let companionTimer: number | undefined
 let removeActivityListener: (() => void) | undefined
+let removeProfileListener: (() => void) | undefined
 let isIgnoringMouseEvents = false
 let activePointerId: number | undefined
 let dragStartScreenX = 0
@@ -183,7 +184,7 @@ async function setActivityMenuOpen(open: boolean): Promise<void> {
     activityPanelSide.value = await window.desktopCat.setActivityPanelOpen(true)
     isActivityMenuOpen.value = true
     decisionKind.value = 'none'
-    decisionMessage.value = `选一个活动，看看${CAT_NAME}愿不愿意。`
+    decisionMessage.value = `选一个活动，看看${catName.value}愿不愿意。`
     setMousePassThrough(false)
   } else {
     isActivityMenuOpen.value = false
@@ -196,7 +197,7 @@ async function chooseActivity(activityId: CatActivityId): Promise<void> {
   if (isRequestingActivity.value) return
   isRequestingActivity.value = true
   decisionKind.value = 'none'
-  decisionMessage.value = `${CAT_NAME}正在考虑……`
+  decisionMessage.value = `${catName.value}正在考虑……`
 
   try {
     const result = await window.desktopCat.requestActivity(activityId)
@@ -291,8 +292,12 @@ onMounted(async () => {
   window.addEventListener('mousemove', handleMouseMove)
   window.addEventListener('mouseleave', handleMouseLeave)
   removeActivityListener = window.desktopCat.onActivityChanged(applyActivitySnapshot)
+  removeProfileListener = window.desktopCat.onCatProfileChanged((profile) => {
+    catName.value = profile.catName
+  })
 
   try {
+    catName.value = (await window.desktopCat.getCatProfile()).catName
     activity.value = await window.desktopCat.getActivity()
     message.value = pickAmbientMessage()
   } catch (error) {
@@ -307,6 +312,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('mousemove', handleMouseMove)
   window.removeEventListener('mouseleave', handleMouseLeave)
   removeActivityListener?.()
+  removeProfileListener?.()
   window.desktopCat.setMovementPaused(false)
   if (isActivityMenuOpen.value) void window.desktopCat.setActivityPanelOpen(false)
   if (reactionTimer) window.clearTimeout(reactionTimer)
@@ -327,12 +333,12 @@ onBeforeUnmount(() => {
     :class="[`state-${activity.id}`, { 'menu-open': isActivityMenuOpen, [`panel-${activityPanelSide}`]: isActivityMenuOpen }]"
   >
     <div class="cat-stage">
-      <p v-if="!isActivityMenuOpen" class="speech" role="status" data-interactive :title="`按住气泡拖动${CAT_NAME}`">
+      <p v-if="!isActivityMenuOpen" class="speech" role="status" data-interactive :title="`按住气泡拖动${catName}`">
         <span>{{ message }}</span>
         <small>{{ currentDefinition.icon }} {{ currentDefinition.label }}</small>
       </p>
 
-      <div v-if="!isActivityMenuOpen" class="drag-handle" data-interactive :title="`按住这里拖动${CAT_NAME}`" />
+      <div v-if="!isActivityMenuOpen" class="drag-handle" data-interactive :title="`按住这里拖动${catName}`" />
 
       <button
         class="cat-button"
@@ -340,7 +346,7 @@ onBeforeUnmount(() => {
         type="button"
         data-interactive
         :aria-label="catLabel"
-        :title="`拖动身体移动；单击选择${CAT_NAME}的活动`"
+        :title="`拖动身体移动；单击选择${catName}的活动`"
         @pointerdown="handleCatPointerDown"
         @pointermove="handleCatPointerMove"
         @pointerup="finishCatDrag"
@@ -361,9 +367,9 @@ onBeforeUnmount(() => {
       <div v-if="activity.id === 'eating'" class="activity-mark treat-mark" aria-hidden="true">♡</div>
     </div>
 
-    <section v-if="isActivityMenuOpen" class="activity-panel" data-interactive :aria-label="`选择${CAT_NAME}的活动`">
+    <section v-if="isActivityMenuOpen" class="activity-panel" data-interactive :aria-label="`选择${catName}的活动`">
       <header>
-        <strong>你想让{{ CAT_NAME }}干什么？</strong>
+        <strong>你想让{{ catName }}干什么？</strong>
         <button type="button" aria-label="关闭活动选择" @click="void setActivityMenuOpen(false)">×</button>
       </header>
 
@@ -385,11 +391,11 @@ onBeforeUnmount(() => {
       <button
         class="pet-button"
         type="button"
-        :title="`摸摸${CAT_NAME}，听它说句话`"
-        :aria-label="`摸摸${CAT_NAME}，听它说句话`"
+        :title="`摸摸${catName}，听它说句话`"
+        :aria-label="`摸摸${catName}，听它说句话`"
         @click="reactToTouch"
       >
-        <strong>{{ CAT_NAME }}</strong>
+        <strong>{{ catName }}</strong>
         <small>已经陪伴了你 {{ companionDays }} 天</small>
       </button>
     </section>

@@ -17,6 +17,16 @@ h1 { margin: 0; font-size: clamp(28px, 3.5vw, 42px); line-height: 1.5; letter-sp
 .cat-face { font-size: 75px; line-height: 1.3; }
 .cat-caption { font-size: 10px; opacity: .65; letter-spacing: 2px; }
 .connection { padding: 28px 32px; background: #fffefa; border: 1px solid #e3e5da; border-radius: 22px; box-shadow: 0 6px 24px #283e3704; }
+.profile-settings { margin-top: 22px; padding: 28px 32px; background: #fffefa; border: 1px solid #e3e5da; border-radius: 22px; }
+.profile-settings .eyebrow { margin-bottom: 8px; }
+.profile-form { max-width: 620px; }
+.profile-form label { display: block; margin-bottom: 9px; color: #617066; font-size: 12px; font-weight: 650; }
+.profile-input-row { display: flex; gap: 10px; }
+.profile-input-row input { flex: 1; min-width: 0; padding: 11px 13px; border: 1px solid #d8ddd2; border-radius: 10px; background: #fafbf6; color: #283e37; font: inherit; font-size: 13px; }
+.profile-input-row input:focus { outline: 3px solid #dce5d6; border-color: #81927b; }
+.form-message { min-height: 20px; margin: 10px 0 0; color: #7d8577; font-size: 12px; }
+.form-message.error { color: #a25145; }
+.form-message.success { color: #49753a; }
 .section-top { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .connection .eyebrow { margin-bottom: 8px; }
 h2 { font-size: 19px; margin: 0; font-weight: 600; }
@@ -43,5 +53,5 @@ h3 { margin: 16px 0 10px; font-size: 16px; font-weight: 550; }
 .feature-grid p { font-size: 13px; line-height: 1.8; color: #7d8577; max-width: 260px; }
 .planned { font-size: 10px; color: #8b947f; background: #eeeee4; border-radius: 5px; padding: 4px 7px; }
 footer { padding: 30px 0; margin-top: 12px; border-top: 1px solid #dddcd2; display: flex; gap: 14px; justify-content: space-between; font-size: 11px; color: #8b947f; }
-@media (max-width: 700px) { .page { padding: 0 20px; } .header { height: 76px; } .header-note { display: none; } .intro { padding: 36px 0; gap: 16px; } .cat-card { width: 110px; height: 154px; font-size: 9px; gap: 8px; } .cat-face { font-size: 46px; } .cat-caption { display: none; } h1 { font-size: 26px; } .intro-text { font-size: 12px; } .connection { padding: 23px 20px; } .section-top { align-items: flex-start; flex-wrap: wrap; } .runtime-grid { grid-template-columns: 1fr; gap: 20px; } .runtime-grid div { flex-direction: row; justify-content: space-between; align-items: center; } .runtime-grid strong { font-size: 16px; } .connection-footer { flex-wrap: wrap; } .feature-grid { grid-template-columns: 1fr; gap: 0; } footer { flex-direction: column; line-height: 1.8; } }
+@media (max-width: 700px) { .page { padding: 0 20px; } .header { height: 76px; } .header-note { display: none; } .intro { padding: 36px 0; gap: 16px; } .cat-card { width: 110px; height: 154px; font-size: 9px; gap: 8px; } .cat-face { font-size: 46px; } .cat-caption { display: none; } h1 { font-size: 26px; } .intro-text { font-size: 12px; } .connection, .profile-settings { padding: 23px 20px; } .section-top { align-items: flex-start; flex-wrap: wrap; } .profile-input-row { align-items: stretch; flex-direction: column; } .runtime-grid { grid-template-columns: 1fr; gap: 20px; } .runtime-grid div { flex-direction: row; justify-content: space-between; align-items: center; } .runtime-grid strong { font-size: 16px; } .connection-footer { flex-wrap: wrap; } .feature-grid { grid-template-columns: 1fr; gap: 0; } footer { flex-direction: column; line-height: 1.8; } }
 @media (max-width: 420px) { .cat-card { display: none; } }

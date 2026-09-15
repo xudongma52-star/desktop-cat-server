@@ -8,6 +8,10 @@ spring:
   profiles:
     default: local
 
+logging:
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] [%X{requestId:-system}] %logger{36} - %msg%n"
+
 management:
   endpoints:
     web:
