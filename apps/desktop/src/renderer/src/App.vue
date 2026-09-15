@@ -6,13 +6,13 @@ import {
   type CatActivityId,
   type CatActivitySnapshot,
 } from '../../shared/cat-activity'
-import eatingCatUrl from './assets/cat/cat-eat-pixel-v4.png'
-import groomingCatUrl from './assets/cat/cat-groom-pixel-v4.png'
-import idleCatUrl from './assets/cat/cat-idle-pixel-v4.png'
-import playingCatUrl from './assets/cat/cat-play-pixel-v4.png'
-import runningCatUrl from './assets/cat/cat-run-pixel-v4.png'
-import sleepingCatUrl from './assets/cat/cat-sleep-pixel-v4.png'
-import walkingCatUrl from './assets/cat/cat-walk-pixel-v4.png'
+import eatingCatUrl from './assets/cat/cat-eat-pixel-v5.png'
+import groomingCatUrl from './assets/cat/cat-groom-pixel-v5.png'
+import idleCatUrl from './assets/cat/cat-idle-pixel-v5.png'
+import playingCatUrl from './assets/cat/cat-play-pixel-v5.png'
+import runningCatUrl from './assets/cat/cat-run-pixel-v5.png'
+import sleepingCatUrl from './assets/cat/cat-sleep-pixel-v5.png'
+import walkingCatUrl from './assets/cat/cat-walk-pixel-v5.png'
 import meowUrl from './assets/audio/happy-cat-meow.mp3'
 
 const activityOptions = CAT_ACTIVITY_IDS.map((activityId) => CAT_ACTIVITY_DEFINITIONS[activityId])
@@ -456,7 +456,7 @@ onBeforeUnmount(() => {
 
 .cat-sprite-sheet {
   position: absolute;
-  top: var(--sprite-top, -111px);
+  top: 0;
   left: 0;
   display: block;
   width: 800%;
@@ -469,13 +469,13 @@ onBeforeUnmount(() => {
   user-select: none;
 }
 
-.cat-button.running .cat-sprite-sheet { --sprite-duration: 560ms; --sprite-top: -111px; }
-.cat-button.walking .cat-sprite-sheet { --sprite-duration: 1120ms; --sprite-top: -115px; }
-.cat-button.playing .cat-sprite-sheet { --sprite-duration: 1360ms; --sprite-top: -117px; }
-.cat-button.sleeping .cat-sprite-sheet { --sprite-duration: 3200ms; --sprite-top: -109px; }
-.cat-button.idle .cat-sprite-sheet { --sprite-duration: 2800ms; --sprite-top: -124px; }
-.cat-button.grooming .cat-sprite-sheet { --sprite-duration: 2100ms; --sprite-top: -122px; }
-.cat-button.eating .cat-sprite-sheet { --sprite-duration: 1800ms; --sprite-top: -120px; }
+.cat-button.running .cat-sprite-sheet { --sprite-duration: 560ms; }
+.cat-button.walking .cat-sprite-sheet { --sprite-duration: 1120ms; }
+.cat-button.playing .cat-sprite-sheet { --sprite-duration: 1360ms; }
+.cat-button.sleeping .cat-sprite-sheet { --sprite-duration: 3200ms; }
+.cat-button.idle .cat-sprite-sheet { --sprite-duration: 2800ms; }
+.cat-button.grooming .cat-sprite-sheet { --sprite-duration: 2100ms; }
+.cat-button.eating .cat-sprite-sheet { --sprite-duration: 1800ms; }
 .cat-button.reacting .cat-sprite-viewport { animation: touch-pop 480ms cubic-bezier(.2, .85, .3, 1); }
 .cat-button.dragging .cat-sprite-sheet { animation-play-state: paused; }
 
