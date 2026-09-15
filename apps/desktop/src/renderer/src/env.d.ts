@@ -5,6 +5,7 @@ import type {
   CatActivityRequestResult,
   CatActivitySnapshot,
 } from '../../shared/cat-activity'
+import type { CompanionInfo } from '../../shared/companion'
 
 declare global {
   interface DesktopCatApi {
@@ -13,6 +14,7 @@ declare global {
     setMovementPaused(paused: boolean): void
     setActivityPanelOpen(open: boolean): Promise<'left' | 'right'>
     getActivity(): Promise<CatActivitySnapshot>
+    getCompanionInfo(): Promise<CompanionInfo>
     requestActivity(activityId: CatActivityId): Promise<CatActivityRequestResult>
     onActivityChanged(listener: (snapshot: CatActivitySnapshot) => void): () => void
   }

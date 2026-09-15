@@ -4,6 +4,7 @@ import type {
   CatActivityRequestResult,
   CatActivitySnapshot,
 } from '../shared/cat-activity'
+import type { CompanionInfo } from '../shared/companion'
 
 const desktopCatApi = {
   setIgnoreMouseEvents(ignore: boolean): void {
@@ -20,6 +21,9 @@ const desktopCatApi = {
   },
   getActivity(): Promise<CatActivitySnapshot> {
     return ipcRenderer.invoke('desktop-cat:get-activity') as Promise<CatActivitySnapshot>
+  },
+  getCompanionInfo(): Promise<CompanionInfo> {
+    return ipcRenderer.invoke('desktop-cat:get-companion-info') as Promise<CompanionInfo>
   },
   requestActivity(activityId: CatActivityId): Promise<CatActivityRequestResult> {
     return ipcRenderer.invoke('desktop-cat:request-activity', activityId) as Promise<CatActivityRequestResult>

@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import {
   app,
@@ -20,17 +20,19 @@ import {
   type CatFacing,
   type CatMovementMode,
 } from '../shared/cat-activity'
+import type { CompanionInfo } from '../shared/companion'
 
 const COMPACT_WINDOW_WIDTH = 176
 const COMPACT_WINDOW_HEIGHT = 176
 const EXPANDED_WINDOW_WIDTH = 400
-const EXPANDED_WINDOW_HEIGHT = 220
+const EXPANDED_WINDOW_HEIGHT = 230
 const MIN_VISIBLE_SIZE = 36
 const MOVEMENT_TICK_MS = 50
 
 type WindowPosition = { x: number; y: number }
 type Velocity = { x: number; y: number }
 type ActivityPanelSide = 'left' | 'right'
+type CompanionState = { firstMetDate: string }
 
 let catWindow: BrowserWindow | null = null
 let tray: Tray | null = null
@@ -44,6 +46,7 @@ let velocity: Velocity = { x: 0, y: 0 }
 let nextDirectionChangeAt = 0
 let activityPanelSide: ActivityPanelSide = 'right'
 let isActivityPanelOpen = false
+let companionState: CompanionState | undefined
 
 let currentActivity: CatActivitySnapshot = {
   id: 'idle',
@@ -55,6 +58,80 @@ let currentActivity: CatActivitySnapshot = {
 
 function getWindowStatePath(): string {
   return join(app.getPath('userData'), 'window-state.json')
+}
+
+function getCompanionStatePath(): string {
+  return join(app.getPath('userData'), 'companion-state.json')
+}
+
+function toLocalDate(date: Date): string {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function parseLocalDate(value: unknown): number | null {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null
+  const [year, month, day] = value.split('-').map(Number)
+  const timestamp = Date.UTC(year, month - 1, day)
+  const parsed = new Date(timestamp)
+  if (
+    parsed.getUTCFullYear() !== year
+    || parsed.getUTCMonth() !== month - 1
+    || parsed.getUTCDate() !== day
+  ) return null
+  return timestamp
+}
+
+function getInitialCompanionDate(): string {
+  const windowStatePath = getWindowStatePath()
+  if (!existsSync(windowStatePath)) return toLocalDate(new Date())
+
+  try {
+    const createdAt = statSync(windowStatePath).birthtime
+    if (!Number.isNaN(createdAt.getTime())) return toLocalDate(createdAt)
+  } catch (error) {
+    console.error('Failed to read the desktop cat first launch date.', error)
+  }
+  return toLocalDate(new Date())
+}
+
+function loadCompanionState(): CompanionState {
+  if (companionState) return companionState
+  const statePath = getCompanionStatePath()
+
+  if (existsSync(statePath)) {
+    try {
+      const candidate = JSON.parse(readFileSync(statePath, 'utf8')) as Partial<CompanionState>
+      if (parseLocalDate(candidate.firstMetDate) !== null) {
+        companionState = { firstMetDate: candidate.firstMetDate as string }
+        return companionState
+      }
+    } catch (error) {
+      console.error('Failed to read the desktop cat companion state.', error)
+    }
+  }
+
+  companionState = { firstMetDate: getInitialCompanionDate() }
+  try {
+    mkdirSync(dirname(statePath), { recursive: true })
+    writeFileSync(statePath, JSON.stringify(companionState, null, 2), 'utf8')
+  } catch (error) {
+    console.error('Failed to save the desktop cat companion state.', error)
+  }
+  return companionState
+}
+
+function getCompanionInfo(): CompanionInfo {
+  const state = loadCompanionState()
+  const firstDay = parseLocalDate(state.firstMetDate) as number
+  const now = new Date()
+  const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate())
+  return {
+    firstMetDate: state.firstMetDate,
+    days: Math.max(1, Math.floor((today - firstDay) / 86_400_000) + 1),
+  }
 }
 
 function readSavedPosition(): WindowPosition | null {
@@ -304,6 +381,21 @@ function chooseVelocity(mode: CatMovementMode): void {
   setFacing(velocity.x < 0 ? 'left' : 'right')
 }
 
+function recoverMovementPosition(mode: CatMovementMode, reason: unknown): void {
+  if (!catWindow || catWindow.isDestroyed()) return
+  const bounds = catWindow.getBounds()
+  const fallback = getDefaultPosition()
+  precisePosition = Number.isFinite(bounds.x) && Number.isFinite(bounds.y)
+    ? { x: bounds.x, y: bounds.y }
+    : fallback
+  console.error('Recovered from an invalid desktop cat movement position.', {
+    reason,
+    precisePosition,
+    velocity,
+  })
+  chooseVelocity(mode)
+}
+
 function moveCatOneFrame(mode: CatMovementMode): void {
   if (movementPaused || !catWindow || catWindow.isDestroyed() || !catWindow.isVisible()) return
   if (Date.now() >= nextDirectionChangeAt) chooseVelocity(mode)
@@ -317,6 +409,11 @@ function moveCatOneFrame(mode: CatMovementMode): void {
   const minimumY = workArea.y
   const maximumY = workArea.y + workArea.height - height
 
+  if (![nextX, nextY, minimumX, maximumX, minimumY, maximumY].every(Number.isFinite)) {
+    recoverMovementPosition(mode, 'Non-finite movement coordinate')
+    return
+  }
+
   if (nextX <= minimumX || nextX >= maximumX) {
     nextX = Math.min(Math.max(nextX, minimumX), maximumX)
     velocity.x *= -1
@@ -327,8 +424,15 @@ function moveCatOneFrame(mode: CatMovementMode): void {
     velocity.y *= -1
   }
 
+  const targetX = Math.round(nextX)
+  const targetY = Math.round(nextY)
   precisePosition = { x: nextX, y: nextY }
-  catWindow.setPosition(Math.round(nextX), Math.round(nextY), false)
+
+  try {
+    catWindow.setPosition(targetX, targetY, false)
+  } catch (error) {
+    recoverMovementPosition(mode, error)
+  }
 }
 
 function startMovement(mode: CatMovementMode): void {
@@ -469,6 +573,11 @@ function registerIpcHandlers(): void {
     return currentActivity
   })
 
+  ipcMain.handle('desktop-cat:get-companion-info', (event) => {
+    if (!isSenderCatWindow(event.sender)) throw new Error('Companion info access denied.')
+    return getCompanionInfo()
+  })
+
   ipcMain.handle('desktop-cat:request-activity', (event, activityId: unknown) => {
     if (!isSenderCatWindow(event.sender)) throw new Error('Activity access denied.')
     if (!isCatActivityId(activityId)) throw new Error('Unknown cat activity.')
@@ -485,6 +594,7 @@ if (!hasSingleInstanceLock) {
   app.whenReady().then(() => {
     app.setAppUserModelId('com.desktopcat.corner')
     registerIpcHandlers()
+    loadCompanionState()
     createCatWindow()
     createTray()
     startActivity('idle')

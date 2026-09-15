@@ -16,6 +16,7 @@ import sleepingCatUrl from './assets/cat/cat-sleep-pixel-v5.png'
 import walkingCatUrl from './assets/cat/cat-walk-pixel-v5.png'
 import meowUrl from './assets/audio/happy-cat-meow.mp3'
 
+const CAT_NAME = '小饼干'
 const activityOptions = CAT_ACTIVITY_IDS.map((activityId) => CAT_ACTIVITY_DEFINITIONS[activityId])
 const catSpriteUrls: Record<CatActivityId, string> = {
   idle: idleCatUrl,
@@ -34,23 +35,25 @@ const activity = ref<CatActivitySnapshot>({
   facing: 'right',
 })
 const message = ref('我来啦，今天也陪着你。')
+const companionDays = ref(1)
 const isReacting = ref(false)
 const isDragging = ref(false)
 const isActivityMenuOpen = ref(false)
 const activityPanelSide = ref<'left' | 'right'>('right')
 const isRequestingActivity = ref(false)
 const decisionKind = ref<'none' | 'accepted' | 'refused' | 'error'>('none')
-const decisionMessage = ref('选一个活动，看看小猫愿不愿意。')
+const decisionMessage = ref(`选一个活动，看看${CAT_NAME}愿不愿意。`)
 
 const currentDefinition = computed(() => CAT_ACTIVITY_DEFINITIONS[activity.value.id])
 const catImageUrl = computed(() => catSpriteUrls[activity.value.id])
-const catLabel = computed(() => `正在${currentDefinition.value.label}的黑色小猫`)
+const catLabel = computed(() => `正在${currentDefinition.value.label}的${CAT_NAME}`)
 
 let meowAudio: HTMLAudioElement | null = null
 let reactionTimer: number | undefined
 let messageTimer: number | undefined
 let conversationTimer: number | undefined
 let closeMenuTimer: number | undefined
+let companionTimer: number | undefined
 let removeActivityListener: (() => void) | undefined
 let isIgnoringMouseEvents = false
 let activePointerId: number | undefined
@@ -102,6 +105,20 @@ function clearConversationTimer(): void {
   if (!conversationTimer) return
   window.clearTimeout(conversationTimer)
   conversationTimer = undefined
+}
+
+async function refreshCompanionDays(): Promise<void> {
+  try {
+    companionDays.value = (await window.desktopCat.getCompanionInfo()).days
+  } catch (error) {
+    console.error('Failed to load the companion day count.', error)
+  }
+
+  const nextDay = new Date()
+  nextDay.setHours(24, 0, 1, 0)
+  companionTimer = window.setTimeout(() => {
+    void refreshCompanionDays()
+  }, nextDay.getTime() - Date.now())
 }
 
 function pickDialogue(candidates: readonly string[]): string {
@@ -166,7 +183,7 @@ async function setActivityMenuOpen(open: boolean): Promise<void> {
     activityPanelSide.value = await window.desktopCat.setActivityPanelOpen(true)
     isActivityMenuOpen.value = true
     decisionKind.value = 'none'
-    decisionMessage.value = '选一个活动，看看小猫愿不愿意。'
+    decisionMessage.value = `选一个活动，看看${CAT_NAME}愿不愿意。`
     setMousePassThrough(false)
   } else {
     isActivityMenuOpen.value = false
@@ -179,7 +196,7 @@ async function chooseActivity(activityId: CatActivityId): Promise<void> {
   if (isRequestingActivity.value) return
   isRequestingActivity.value = true
   decisionKind.value = 'none'
-  decisionMessage.value = '小猫正在考虑……'
+  decisionMessage.value = `${CAT_NAME}正在考虑……`
 
   try {
     const result = await window.desktopCat.requestActivity(activityId)
@@ -282,6 +299,7 @@ onMounted(async () => {
     console.error('Failed to load the current cat activity.', error)
     message.value = '我刚刚走神了一小会儿，现在回来陪你啦。'
   }
+  await refreshCompanionDays()
   scheduleConversation(8_000)
 })
 
@@ -293,6 +311,7 @@ onBeforeUnmount(() => {
   if (isActivityMenuOpen.value) void window.desktopCat.setActivityPanelOpen(false)
   if (reactionTimer) window.clearTimeout(reactionTimer)
   if (closeMenuTimer) window.clearTimeout(closeMenuTimer)
+  if (companionTimer) window.clearTimeout(companionTimer)
   clearMessageTimer()
   clearConversationTimer()
   if (meowAudio) {
@@ -308,12 +327,12 @@ onBeforeUnmount(() => {
     :class="[`state-${activity.id}`, { 'menu-open': isActivityMenuOpen, [`panel-${activityPanelSide}`]: isActivityMenuOpen }]"
   >
     <div class="cat-stage">
-      <p v-if="!isActivityMenuOpen" class="speech" role="status" data-interactive title="按住气泡拖动小猫">
+      <p v-if="!isActivityMenuOpen" class="speech" role="status" data-interactive :title="`按住气泡拖动${CAT_NAME}`">
         <span>{{ message }}</span>
         <small>{{ currentDefinition.icon }} {{ currentDefinition.label }}</small>
       </p>
 
-      <div v-if="!isActivityMenuOpen" class="drag-handle" data-interactive title="按住这里拖动小猫" />
+      <div v-if="!isActivityMenuOpen" class="drag-handle" data-interactive :title="`按住这里拖动${CAT_NAME}`" />
 
       <button
         class="cat-button"
@@ -321,7 +340,7 @@ onBeforeUnmount(() => {
         type="button"
         data-interactive
         :aria-label="catLabel"
-        title="拖动身体移动；单击选择小猫活动"
+        :title="`拖动身体移动；单击选择${CAT_NAME}的活动`"
         @pointerdown="handleCatPointerDown"
         @pointermove="handleCatPointerMove"
         @pointerup="finishCatDrag"
@@ -342,9 +361,9 @@ onBeforeUnmount(() => {
       <div v-if="activity.id === 'eating'" class="activity-mark treat-mark" aria-hidden="true">♡</div>
     </div>
 
-    <section v-if="isActivityMenuOpen" class="activity-panel" data-interactive aria-label="选择小猫活动">
+    <section v-if="isActivityMenuOpen" class="activity-panel" data-interactive :aria-label="`选择${CAT_NAME}的活动`">
       <header>
-        <strong>想让小猫做什么？</strong>
+        <strong>你想让{{ CAT_NAME }}干什么？</strong>
         <button type="button" aria-label="关闭活动选择" @click="void setActivityMenuOpen(false)">×</button>
       </header>
 
@@ -363,7 +382,16 @@ onBeforeUnmount(() => {
         </button>
       </div>
 
-      <button class="pet-button" type="button" @click="reactToTouch">摸摸它，听它说句话</button>
+      <button
+        class="pet-button"
+        type="button"
+        :title="`摸摸${CAT_NAME}，听它说句话`"
+        :aria-label="`摸摸${CAT_NAME}，听它说句话`"
+        @click="reactToTouch"
+      >
+        <strong>{{ CAT_NAME }}</strong>
+        <small>已经陪伴了你 {{ companionDays }} 天</small>
+      </button>
     </section>
   </main>
 </template>
@@ -538,7 +566,7 @@ onBeforeUnmount(() => {
   z-index: 20;
   top: 4px;
   width: 216px;
-  height: 212px;
+  height: 222px;
   padding: 9px;
   overflow: hidden;
   border: 1px solid rgb(205 162 105 / 72%);
@@ -587,6 +615,8 @@ onBeforeUnmount(() => {
 .activity-grid span { font-size: 10px; font-weight: 700; }
 
 .pet-button {
+  display: grid;
+  justify-items: center;
   width: 100%;
   margin-top: 3px;
   padding: 2px;
@@ -597,6 +627,9 @@ onBeforeUnmount(() => {
   font-size: 9px;
   cursor: pointer;
 }
+
+.pet-button strong { font-size: 9px; line-height: 1.1; }
+.pet-button small { margin-top: 1px; color: #987864; font-size: 8px; line-height: 1.1; }
 
 @keyframes sprite-cycle { to { transform: translateX(-100%); } }
 @keyframes touch-pop { 0% { transform: translateY(0) scale(1); } 45% { transform: translateY(-10px) scale(1.04) rotate(-2deg); } 75% { transform: translateY(-3px) scale(.99) rotate(1deg); } 100% { transform: translateY(0) scale(1); } }
