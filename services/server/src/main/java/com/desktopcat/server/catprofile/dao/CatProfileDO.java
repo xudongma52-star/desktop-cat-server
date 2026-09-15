@@ -1,8 +1,8 @@
-package com.desktopcat.server.catprofile;
+package com.desktopcat.server.catprofile.dao;
 
 import java.time.Instant;
 
-public record CatProfile(
+public record CatProfileDO(
         long profileId,
         String profileKey,
         String catName,

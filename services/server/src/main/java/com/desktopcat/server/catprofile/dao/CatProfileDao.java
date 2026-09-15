@@ -1,11 +1,11 @@
-package com.desktopcat.server.catprofile;
+package com.desktopcat.server.catprofile.dao;
 
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
 @Mapper
-public interface CatProfileMapper {
-    CatProfile selectPrimaryProfile();
+public interface CatProfileDao {
+    CatProfileDO selectPrimaryProfile();
 
     int updatePrimaryName(
             @Param("profileId") long profileId,

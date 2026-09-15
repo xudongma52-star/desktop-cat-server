@@ -1,5 +1,6 @@
-package com.desktopcat.server.catprofile;
+package com.desktopcat.server.catprofile.controller;
 
+import com.desktopcat.server.catprofile.dao.CatProfileDO;
 import java.time.Instant;
 
 public record CatProfileResponse(
@@ -7,7 +8,7 @@ public record CatProfileResponse(
         String catName,
         int version,
         Instant updatedAt) {
-    public static CatProfileResponse from(CatProfile profile) {
+    public static CatProfileResponse from(CatProfileDO profile) {
         return new CatProfileResponse(
                 profile.profileId(), profile.catName(), profile.version(), profile.updatedAt());
     }

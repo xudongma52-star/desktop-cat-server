@@ -103,7 +103,7 @@ services/server/             Java 后端
   src/test/java/             后端集成测试
 ```
 
-小猫资料链路位于后端 `catprofile` 包、`mappers/CatProfileMapper.xml` 和 `db/migration`。后续数据库访问继续复用已有能力，并遵守新增 Mapper/SQL 的审批约定。
+小猫资料后端按 `controller`、`service`、`service.impl`、`dao` 分层。Controller 包内放接口请求与响应对象；DAO 包内只有数据库对象和 MyBatis 接口，具体查询由 `mappers/CatProfileDao.xml` 实现，不建立 DAO Impl；迁移位于 `db/migration`。后续数据库访问继续复用已有 DAO 能力，并遵守新增 Mapper/SQL 的审批约定。
 
 ## 构建和测试
 
