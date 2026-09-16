@@ -1,18 +1,22 @@
 package com.desktopcat.server.record.service;
 
-import com.desktopcat.server.record.dao.PersonalRecordDO;
+import com.desktopcat.server.record.dto.PersonalRecordCreateDto;
+import com.desktopcat.server.record.dto.PersonalRecordDetailDto;
+import com.desktopcat.server.record.dto.PersonalRecordPageDto;
+import com.desktopcat.server.record.dto.PersonalRecordRecallDto;
+import com.desktopcat.server.record.dto.PersonalRecordUpdateDto;
 import java.util.List;
 
 public interface PersonalRecordService {
-    PersonalRecordDO createRecord(PersonalRecordDO record);
+    PersonalRecordDetailDto createRecord(PersonalRecordCreateDto request);
 
-    PersonalRecordPage listRecords(Integer page, Integer pageSize, String recordType);
+    PersonalRecordPageDto listRecords(Integer page, Integer pageSize, String recordType);
 
-    PersonalRecordDO getRecord(Long recordId);
+    PersonalRecordDetailDto getRecord(Long recordId);
 
-    PersonalRecordDO updateRecord(Long recordId, PersonalRecordDO record);
+    PersonalRecordDetailDto updateRecord(Long recordId, PersonalRecordUpdateDto request);
 
     void deleteRecord(Long recordId, Integer version);
 
-    List<PersonalRecordRecall> listRecalls(Integer limit);
+    List<PersonalRecordRecallDto> listRecalls(Integer limit);
 }

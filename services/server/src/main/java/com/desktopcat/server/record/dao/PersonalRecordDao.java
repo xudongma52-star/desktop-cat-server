@@ -1,5 +1,6 @@
 package com.desktopcat.server.record.dao;
 
+import com.desktopcat.server.record.dao.dataobject.PersonalRecordDO;
 import java.util.List;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;

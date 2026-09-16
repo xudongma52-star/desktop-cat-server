@@ -1,8 +1,9 @@
-package com.desktopcat.server.record.service;
+package com.desktopcat.server.record.dto;
 
 import java.time.LocalDate;
 
-public record PersonalRecordRecall(
+/** 首页温馨回忆轮播使用的文章摘要数据。 */
+public record PersonalRecordRecallDto(
         long recordId,
         String recordType,
         String title,

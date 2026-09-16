@@ -48,7 +48,7 @@ pnpm dev
 
 打开 [http://127.0.0.1:5173](http://127.0.0.1:5173)，应看到“前后端已连通”。启动任一服务的终端按 `Ctrl+C` 可停止该服务。
 
-后端接口：[运行状态](http://127.0.0.1:8080/api/system/status)、[小猫资料](http://127.0.0.1:8080/api/cat/profile)、[文章列表](http://127.0.0.1:8080/api/records)、[文章回忆](http://127.0.0.1:8080/api/records/recalls)、[SSE 事件流](http://127.0.0.1:8080/api/events)、[健康检查](http://127.0.0.1:8080/actuator/health)。
+后端接口：[运行状态](http://127.0.0.1:8080/api/system/status)、[小猫资料](http://127.0.0.1:8080/api/cat/profile)、[文章列表](http://127.0.0.1:8080/api/records)、[文章回忆](http://127.0.0.1:8080/api/records/recalls)、[SSE 事件流](http://127.0.0.1:8080/api/events)、[健康检查](http://127.0.0.1:8080/actuator/health)。请求字段、响应示例和错误码见 [接口文档](./接口文档.md)。
 
 单独开发桌面猫：
 
@@ -116,11 +116,16 @@ apps/desktop/                Electron 桌面猫
   build/                     应用图标
 services/server/             Java 后端
   src/main/java/             启动类及 cat、record 等业务模块
+    .../record/controller/   个人文章 HTTP 接口
+    .../record/dto/          Controller 与 Service 共用的传输对象
+    .../record/service/      Service 接口与 impl 实现
+    .../record/dao/          MyBatis DAO 接口
+      dataobject/            personal_record 数据库映射对象
   src/main/resources/        配置、MyBatis XML 与 Flyway 迁移
   src/test/java/             后端集成测试
 ```
 
-小猫资料和个人文章后端都严格按 `controller`、`service` 接口、`service.impl`、`dao` 分层。Controller 包内放接口请求与响应对象；DAO 包内只有数据库对象和 MyBatis 接口，具体 SQL 分别由 `mappers/CatProfileDao.xml` 和 `mappers/PersonalRecordDao.xml` 实现，不建立 DAO Impl；迁移位于 `db/migration`。后续数据库访问继续复用已有 DAO 能力，并遵守新增 Mapper/SQL 的审批约定。
+小猫资料和个人文章后端都按 `controller`、`service` 接口、`service.impl`、`dao` 分层。个人文章模块的请求和返回对象统一放在模块级 `record.dto`，类名统一以 `Dto` 结尾，Controller 可以直接把它们交给 Service，不再维护两套内容重复的 DTO 和转换方法。与 `personal_record` 表映射的 `PersonalRecordDO` 单独放在 `dao.dataobject`，仅由 `service.impl` 和 `dao` 使用。DAO 层只保留数据库对象和 MyBatis 接口，具体 SQL 分别由 `mappers/CatProfileDao.xml` 和 `mappers/PersonalRecordDao.xml` 实现，不建立 DAO Impl；迁移位于 `db/migration`。后续数据库访问继续复用已有 DAO 能力，并遵守新增 Mapper/SQL 的审批约定。
 
 ## 构建和测试
 
@@ -139,7 +144,7 @@ cd services\server
 
 2026-09-15 已更新桌面猫的时段陪伴对话、触摸回应与活动文案，并移除界面中的倒计时、活动时长和奔跑速度线；桌面端 Node 与 Vue 类型检查、生产构建均已通过。
 
-2026-09-16 已验证：网页个人文章生产构建、桌面端类型检查与生产构建通过；Maven Wrapper `verify` 通过 7 项后端测试并完成 JAR 打包；在全新 PostgreSQL 数据库上成功执行 Flyway V1、V2，并通过真实 HTTP 请求验证创建、详情、摘要分页与类型筛选、更新、文章回忆、旧版本冲突、逻辑删除及删除后不可见。MyBatis XML 数据库读写已实际验证。浏览器已检查桌面宽度和 390px 窄屏：首页、列表、创建、详情与回忆轮播显示正常，控制台无错误。
+2026-09-16 已验证：网页个人文章生产构建、桌面端类型检查与生产构建通过；文章模块已完成 DTO 与数据库对象职责拆分，Maven Wrapper `verify` 通过 8 项后端测试并完成 JAR 打包；重构后的应用已连接 PostgreSQL 16.13 正常启动，小猫资料和文章分页接口实际读取成功。在全新数据库上已成功执行 Flyway V1、V2，并通过真实 HTTP 请求验证创建、详情、摘要分页与类型筛选、更新、文章回忆、旧版本冲突、逻辑删除及删除后不可见。MyBatis XML 数据库读写已实际验证。浏览器已检查桌面宽度和 390px 窄屏：首页、列表、创建、详情与回忆轮播显示正常，控制台无错误。
 
 ## PostgreSQL 连接配置
 

@@ -16,7 +16,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.desktopcat.server.record.controller.PersonalRecordController;
-import com.desktopcat.server.record.dao.PersonalRecordDO;
+import com.desktopcat.server.record.dao.dataobject.PersonalRecordDO;
 import com.desktopcat.server.record.dao.PersonalRecordDao;
 import com.desktopcat.server.record.service.PersonalRecordService;
 import com.desktopcat.server.record.service.impl.PersonalRecordServiceImpl;
@@ -183,6 +183,28 @@ class PersonalRecordControllerTest {
         mvc.perform(get("/api/records/99"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("PERSONAL_RECORD_NOT_FOUND"));
+    }
+
+    @Test
+    void preservesRequestBodyAndVersionValidationAcrossTheServiceBoundary() throws Exception {
+        mvc.perform(post("/api/records")
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("REQUEST_BODY_REQUIRED"));
+
+        mvc.perform(put("/api/records/1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "recordType":"DIARY",
+                                  "content":"缺少版本号",
+                                  "recordDate":"2026-09-16",
+                                  "recallEnabled":false,
+                                  "ragEnabled":false
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("RECORD_VERSION_REQUIRED"));
     }
 
     @Test
