@@ -1,7 +1,18 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import HomeView from '../views/HomeView.vue'
+import RecordDetailView from '../views/RecordDetailView.vue'
+import RecordEditorView from '../views/RecordEditorView.vue'
+import RecordListView from '../views/RecordListView.vue'
 
 export const router = createRouter({
   history: createWebHistory(),
-  routes: [{ path: '/', name: 'home', component: HomeView }],
+  scrollBehavior: () => ({ top: 0 }),
+  routes: [
+    { path: '/', name: 'home', component: HomeView },
+    { path: '/records', name: 'records', component: RecordListView },
+    { path: '/records/new', name: 'record-create', component: RecordEditorView },
+    { path: '/records/:recordId', name: 'record-detail', component: RecordDetailView },
+    { path: '/records/:recordId/edit', name: 'record-edit', component: RecordEditorView },
+    { path: '/:pathMatch(.*)*', redirect: '/' },
+  ],
 })
