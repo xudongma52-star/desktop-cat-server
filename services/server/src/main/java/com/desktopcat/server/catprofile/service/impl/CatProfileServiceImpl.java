@@ -14,10 +14,13 @@ import org.springframework.web.server.ResponseStatusException;
 @Service
 @Profile("postgres")
 public class CatProfileServiceImpl implements CatProfileService {
+    //定义日志工具，提供log能力
     private static final Logger log = LoggerFactory.getLogger(CatProfileServiceImpl.class);
+    //名字最大长度常量，小猫名称目前最大限制是20
     private static final int MAX_CAT_NAME_LENGTH = 20;
 
     private final CatProfileDao catProfileDao;
+    //事件推送依赖
     private final AssistantEventStream eventStream;
 
     public CatProfileServiceImpl(CatProfileDao catProfileDao, AssistantEventStream eventStream) {
