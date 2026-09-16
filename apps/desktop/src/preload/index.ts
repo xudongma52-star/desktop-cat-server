@@ -6,6 +6,7 @@ import type {
 } from '../shared/cat-activity'
 import type { CompanionInfo } from '../shared/companion'
 import type { CatProfile } from '../shared/cat-profile'
+import type { Emotion } from '../shared/emotion'
 
 const desktopCatApi = {
   setIgnoreMouseEvents(ignore: boolean): void {
@@ -28,6 +29,9 @@ const desktopCatApi = {
   },
   getCatProfile(): Promise<CatProfile> {
     return ipcRenderer.invoke('desktop-cat:get-profile') as Promise<CatProfile>
+  },
+  createEmotion(content: string): Promise<Emotion> {
+    return ipcRenderer.invoke('desktop-cat:create-emotion', content) as Promise<Emotion>
   },
   requestActivity(activityId: CatActivityId): Promise<CatActivityRequestResult> {
     return ipcRenderer.invoke('desktop-cat:request-activity', activityId) as Promise<CatActivityRequestResult>

@@ -56,7 +56,10 @@ public class GlobalExceptionHandler {
             Map.entry("Personal record was not found.", "PERSONAL_RECORD_NOT_FOUND"),
             Map.entry("Personal record has been updated. Refresh and try again.",
                     "PERSONAL_RECORD_VERSION_CONFLICT"),
-            Map.entry("Personal record could not be created.", "PERSONAL_RECORD_CREATE_FAILED"));
+            Map.entry("Personal record could not be created.", "PERSONAL_RECORD_CREATE_FAILED"),
+            Map.entry("Emotion content is required.", "EMOTION_CONTENT_REQUIRED"),
+            Map.entry("Emotion could not be created.", "EMOTION_CREATE_FAILED"),
+            Map.entry("Emotion date is invalid.", "EMOTION_DATE_INVALID"));
 
     @ExceptionHandler(ResponseStatusException.class)
     public ResponseEntity<ApiErrorResponse> handleStatus(
@@ -81,6 +84,7 @@ public class GlobalExceptionHandler {
             case "page" -> "Page must be a number.";
             case "pageSize" -> "Page size must be a number.";
             case "limit" -> "Recall limit must be a number.";
+            case "date" -> "Emotion date is invalid.";
             default -> "Request parameter is invalid.";
         };
         String code = ERROR_CODES.getOrDefault(message, "REQUEST_PARAMETER_INVALID");

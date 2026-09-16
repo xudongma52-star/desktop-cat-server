@@ -23,6 +23,7 @@ import {
 } from '../shared/cat-activity'
 import type { CompanionInfo } from '../shared/companion'
 import type { CatProfile } from '../shared/cat-profile'
+import type { Emotion } from '../shared/emotion'
 
 const COMPACT_WINDOW_WIDTH = 176
 const COMPACT_WINDOW_HEIGHT = 176
@@ -35,6 +36,7 @@ const PROFILE_EVENT_RETRY_DELAYS_MS = [1_000, 2_000, 5_000, 10_000, 30_000] as c
 const ASSISTANT_API_URL = process.env.DESKTOP_CAT_API_URL ?? 'http://127.0.0.1:8080'
 const CAT_PROFILE_API_URL = `${ASSISTANT_API_URL}/api/cat/profile`
 const ASSISTANT_EVENTS_API_URL = `${ASSISTANT_API_URL}/api/events`
+const EMOTIONS_API_URL = `${ASSISTANT_API_URL}/api/emotions`
 const DEFAULT_CAT_PROFILE: CatProfile = {
   profileId: 1,
   catName: '小饼干',
@@ -98,6 +100,28 @@ function isCatProfile(value: unknown): value is CatProfile {
     && typeof candidate.catName === 'string' && candidate.catName.trim().length > 0
     && Number.isSafeInteger(candidate.version) && (candidate.version ?? -1) >= 0
     && typeof candidate.updatedAt === 'string'
+}
+
+function isEmotion(value: unknown): value is Emotion {
+  if (!value || typeof value !== 'object') return false
+  const candidate = value as Partial<Emotion>
+  return Number.isSafeInteger(candidate.emotionId) && (candidate.emotionId ?? 0) > 0
+    && typeof candidate.content === 'string' && candidate.content.trim().length > 0
+    && typeof candidate.recordDate === 'string'
+    && typeof candidate.createdAt === 'string'
+}
+
+async function createEmotion(content: string): Promise<Emotion> {
+  const response = await fetch(EMOTIONS_API_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content }),
+    signal: AbortSignal.timeout(5_000),
+  })
+  if (!response.ok) throw new Error(`Emotion request returned HTTP ${response.status}.`)
+  const candidate: unknown = await response.json()
+  if (!isEmotion(candidate)) throw new Error('Emotion response is invalid.')
+  return candidate
 }
 
 function loadCatProfile(): void {
@@ -792,6 +816,14 @@ function registerIpcHandlers(): void {
   ipcMain.handle('desktop-cat:get-profile', (event) => {
     if (!isSenderCatWindow(event.sender)) throw new Error('Cat profile access denied.')
     return catProfile
+  })
+
+  ipcMain.handle('desktop-cat:create-emotion', (event, content: unknown) => {
+    if (!isSenderCatWindow(event.sender)) throw new Error('Emotion access denied.')
+    if (typeof content !== 'string' || content.trim().length === 0) {
+      throw new Error('Emotion content is required.')
+    }
+    return createEmotion(content.trim())
   })
 
   ipcMain.handle('desktop-cat:request-activity', (event, activityId: unknown) => {

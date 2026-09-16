@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import {
   CAT_ACTIVITY_DEFINITIONS,
   CAT_ACTIVITY_IDS,
@@ -43,6 +43,12 @@ const activityPanelSide = ref<'left' | 'right'>('right')
 const isRequestingActivity = ref(false)
 const decisionKind = ref<'none' | 'accepted' | 'refused' | 'error'>('none')
 const decisionMessage = ref(`选一个活动，看看${catName.value}愿不愿意。`)
+const EMOTION_DRAFT_KEY = 'desktop-cat:emotion-draft'
+const isEmotionInputOpen = ref(false)
+const isSavingEmotion = ref(false)
+const emotionDraft = ref(window.localStorage.getItem(EMOTION_DRAFT_KEY) ?? '')
+const emotionError = ref('')
+const emotionInput = ref<HTMLTextAreaElement | null>(null)
 
 const currentDefinition = computed(() => CAT_ACTIVITY_DEFINITIONS[activity.value.id])
 const catImageUrl = computed(() => catSpriteUrls[activity.value.id])
@@ -174,6 +180,48 @@ function syncMovementPause(): void {
   window.desktopCat.setMovementPaused(isActivityMenuOpen.value || isDragging.value)
 }
 
+watch(emotionDraft, (value) => {
+  if (value) window.localStorage.setItem(EMOTION_DRAFT_KEY, value)
+  else window.localStorage.removeItem(EMOTION_DRAFT_KEY)
+})
+
+async function openEmotionInput(): Promise<void> {
+  emotionError.value = ''
+  isEmotionInputOpen.value = true
+  await nextTick()
+  emotionInput.value?.focus()
+}
+
+function handleEmotionKeydown(event: KeyboardEvent): void {
+  if (event.key !== 'Enter' || event.shiftKey || event.isComposing) return
+  event.preventDefault()
+  void submitEmotion()
+}
+
+async function submitEmotion(): Promise<void> {
+  if (isSavingEmotion.value) return
+  const content = emotionDraft.value.trim()
+  if (!content) {
+    emotionError.value = '写点什么再告诉我吧。'
+    return
+  }
+
+  isSavingEmotion.value = true
+  emotionError.value = ''
+  try {
+    await window.desktopCat.createEmotion(content)
+    emotionDraft.value = ''
+    isEmotionInputOpen.value = false
+    await setActivityMenuOpen(false)
+    showTemporaryMessage('记下了。', 3_600)
+  } catch (error) {
+    console.error('Failed to save the emotion.', error)
+    emotionError.value = '刚才没有保存成功，内容还在这里。'
+  } finally {
+    isSavingEmotion.value = false
+  }
+}
+
 async function setActivityMenuOpen(open: boolean): Promise<void> {
   if (closeMenuTimer) {
     window.clearTimeout(closeMenuTimer)
@@ -187,6 +235,7 @@ async function setActivityMenuOpen(open: boolean): Promise<void> {
     decisionMessage.value = `选一个活动，看看${catName.value}愿不愿意。`
     setMousePassThrough(false)
   } else {
+    isEmotionInputOpen.value = false
     isActivityMenuOpen.value = false
     await window.desktopCat.setActivityPanelOpen(false)
   }
@@ -367,12 +416,32 @@ onBeforeUnmount(() => {
       <div v-if="activity.id === 'eating'" class="activity-mark treat-mark" aria-hidden="true">♡</div>
     </div>
 
-    <section v-if="isActivityMenuOpen" class="activity-panel" data-interactive :aria-label="`选择${catName}的活动`">
+    <section v-if="isActivityMenuOpen" class="activity-panel" data-interactive :aria-label="isEmotionInputOpen ? `告诉${catName}一件事` : `选择${catName}的活动`">
       <header>
-        <strong>你想让{{ catName }}干什么？</strong>
-        <button type="button" aria-label="关闭活动选择" @click="void setActivityMenuOpen(false)">×</button>
+        <strong>{{ isEmotionInputOpen ? '想说什么就说吧' : `你想让${catName}干什么？` }}</strong>
+        <span class="panel-header-actions">
+          <button v-if="!isEmotionInputOpen" type="button" title="跟小猫说句话" aria-label="跟小猫说句话" @click="openEmotionInput">✎</button>
+          <button type="button" aria-label="关闭面板" @click="void setActivityMenuOpen(false)">×</button>
+        </span>
       </header>
 
+      <form v-if="isEmotionInputOpen" class="emotion-form" @submit.prevent="submitEmotion">
+        <textarea
+          ref="emotionInput"
+          v-model="emotionDraft"
+          rows="5"
+          placeholder="不用整理，想到什么就说什么……"
+          :disabled="isSavingEmotion"
+          @keydown="handleEmotionKeydown"
+        ></textarea>
+        <p class="emotion-help">Enter 发送 · Shift + Enter 换行</p>
+        <p v-if="emotionError" class="emotion-error" role="alert">{{ emotionError }}</p>
+        <button class="emotion-send" type="submit" :disabled="isSavingEmotion">
+          {{ isSavingEmotion ? '正在记下…' : '告诉小猫' }}
+        </button>
+      </form>
+
+      <template v-else>
       <p class="decision" :class="decisionKind" role="status">{{ decisionMessage }}</p>
 
       <div class="activity-grid">
@@ -398,6 +467,7 @@ onBeforeUnmount(() => {
         <strong>{{ catName }}</strong>
         <small>已经陪伴了你 {{ companionDays }} 天</small>
       </button>
+      </template>
     </section>
   </main>
 </template>
@@ -590,6 +660,15 @@ onBeforeUnmount(() => {
 .activity-panel header { display: flex; align-items: center; justify-content: space-between; height: 23px; }
 .activity-panel header strong { font-size: 12px; }
 .activity-panel header button { width: 23px; height: 23px; padding: 0; border: 0; border-radius: 50%; background: #f3e3cd; color: #705950; cursor: pointer; }
+.panel-header-actions { display: flex; gap: 4px; }
+
+.emotion-form { display: grid; gap: 6px; margin-top: 10px; }
+.emotion-form textarea { width: 100%; min-height: 102px; padding: 9px 10px; resize: none; border: 1px solid #ead2b4; border-radius: 10px; outline: none; color: #55423d; background: #fffdf8; font: inherit; font-size: 10px; line-height: 1.55; }
+.emotion-form textarea:focus { border-color: #d69c55; box-shadow: 0 0 0 2px rgb(214 156 85 / 18%); }
+.emotion-help { margin: 0; color: #a08673; font-size: 8px; }
+.emotion-error { min-height: 12px; margin: 0; color: #a04d4d; font-size: 9px; }
+.emotion-send { justify-self: end; min-width: 76px; padding: 6px 10px; border: 0; border-radius: 9px; background: #72594d; color: #fffaf1; font-size: 9px; cursor: pointer; }
+.emotion-send:disabled { cursor: wait; opacity: .6; }
 
 .decision {
   min-height: 20px;
