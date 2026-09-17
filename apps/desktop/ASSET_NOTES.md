@@ -30,4 +30,4 @@
 
 ## 猫叫
 
-猫叫的来源、作者和 CC0 许可证记录在 `THIRD_PARTY_NOTICES.md`。运行时读取项目内 MP3，不访问网络。
+猫叫由 `src/renderer/src/cat-sounds.ts` 使用 Web Audio API 在本地生成，不读取网络资源。打招呼、触摸、提醒、开心和撒娇抗议使用不同音型，每类声音会轮换变体，并通过短渐入渐出控制爆音。

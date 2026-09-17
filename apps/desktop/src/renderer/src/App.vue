@@ -8,6 +8,7 @@ import {
 } from '../../shared/cat-activity'
 import type { Reminder } from '../../shared/reminder'
 import { getAmbientMessages, TOUCH_MESSAGES } from './cat-dialogue'
+import { disposeCatSounds, playCatSound } from './cat-sounds'
 import eatingCatUrl from './assets/cat/cat-eat-pixel-v5.png'
 import groomingCatUrl from './assets/cat/cat-groom-pixel-v5.png'
 import idleCatUrl from './assets/cat/cat-idle-pixel-v5.png'
@@ -15,7 +16,6 @@ import playingCatUrl from './assets/cat/cat-play-pixel-v5.png'
 import runningCatUrl from './assets/cat/cat-run-pixel-v5.png'
 import sleepingCatUrl from './assets/cat/cat-sleep-pixel-v5.png'
 import walkingCatUrl from './assets/cat/cat-walk-pixel-v5.png'
-import meowUrl from './assets/audio/happy-cat-meow.mp3'
 
 const catName = ref('小饼干')
 const activityOptions = CAT_ACTIVITY_IDS.map((activityId) => CAT_ACTIVITY_DEFINITIONS[activityId])
@@ -57,7 +57,6 @@ const currentDefinition = computed(() => CAT_ACTIVITY_DEFINITIONS[activity.value
 const catImageUrl = computed(() => catSpriteUrls[activity.value.id])
 const catLabel = computed(() => `正在${currentDefinition.value.label}的${catName.value}`)
 
-let meowAudio: HTMLAudioElement | null = null
 let reactionTimer: number | undefined
 let messageTimer: number | undefined
 let conversationTimer: number | undefined
@@ -94,16 +93,6 @@ function handleMouseMove(event: MouseEvent): void {
 
 function handleMouseLeave(): void {
   setMousePassThrough(true)
-}
-
-function playMeow(): void {
-  meowAudio ??= new Audio(meowUrl)
-  meowAudio.pause()
-  meowAudio.currentTime = 0
-  meowAudio.volume = 0.58
-  void meowAudio.play().catch((error: unknown) => {
-    console.warn('Failed to play the cat meow.', error)
-  })
 }
 
 function clearMessageTimer(): void {
@@ -240,7 +229,7 @@ async function handleDueReminder(reminder: Reminder): Promise<void> {
   if (isActivityMenuOpen.value) await setActivityMenuOpen(false)
   dueReminder.value = reminder
   showTemporaryMessage(formatDueReminderMessage(reminder), 60_000)
-  playMeow()
+  playCatSound('reminder')
   setMousePassThrough(false)
 }
 
@@ -254,6 +243,7 @@ async function completeDueReminder(): Promise<void> {
     )
     dueReminder.value = null
     showTemporaryMessage('完成啦！辛苦了，休息一下吧。', 7_000)
+    playCatSound('happy')
   } catch (error) {
     console.error('Failed to complete the reminder.', error)
     showTemporaryMessage('刚才没有记成功，再点一次试试。', 7_000)
@@ -294,6 +284,7 @@ async function chooseActivity(activityId: CatActivityId): Promise<void> {
     decisionKind.value = result.accepted ? 'accepted' : 'refused'
     decisionMessage.value = result.message
     showTemporaryMessage(result.message)
+    playCatSound(result.accepted ? 'happy' : 'protest')
 
     if (result.accepted) {
       closeMenuTimer = window.setTimeout(() => void setActivityMenuOpen(false), 1_100)
@@ -308,7 +299,7 @@ async function chooseActivity(activityId: CatActivityId): Promise<void> {
 }
 
 function reactToTouch(): void {
-  playMeow()
+  playCatSound('touch')
   isReacting.value = false
   if (reactionTimer) window.clearTimeout(reactionTimer)
   const touchMessage = pickDialogue(TOUCH_MESSAGES)
@@ -328,7 +319,7 @@ function handleCatClick(): void {
     suppressNextClick = false
     return
   }
-  playMeow()
+  playCatSound('greeting')
   void setActivityMenuOpen(true)
 }
 
@@ -413,10 +404,7 @@ onBeforeUnmount(() => {
   if (companionTimer) window.clearTimeout(companionTimer)
   clearMessageTimer()
   clearConversationTimer()
-  if (meowAudio) {
-    meowAudio.pause()
-    meowAudio.src = ''
-  }
+  disposeCatSounds()
 })
 </script>
 
