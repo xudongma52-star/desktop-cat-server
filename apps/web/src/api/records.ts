@@ -48,6 +48,19 @@ export interface RecallRecord {
   mood: string | null
 }
 
+export interface RecordActivityDay {
+  recordDate: string
+  recordCount: number
+}
+
+export interface RecordActivity {
+  startDate: string
+  endDate: string
+  totalRecords: number
+  activeDays: number
+  days: RecordActivityDay[]
+}
+
 export interface RecordInput {
   recordType: RecordType
   title: string | null
@@ -92,6 +105,15 @@ export async function deleteRecord(recordId: number, version: number): Promise<v
 
 export async function getRecallRecords(limit = 10): Promise<RecallRecord[]> {
   return apiRequest<RecallRecord[]>(`/api/records/recalls?limit=${limit}`)
+}
+
+export async function getRecordActivity(
+  startDate: string,
+  endDate: string,
+  recordType: RecordType = 'DIARY',
+): Promise<RecordActivity> {
+  const params = new URLSearchParams({ startDate, endDate, recordType })
+  return apiRequest<RecordActivity>(`/api/records/activity?${params.toString()}`)
 }
 
 export const recordTypeLabels: Record<RecordType, string> = {

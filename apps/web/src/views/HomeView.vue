@@ -5,6 +5,7 @@ import type { SystemStatus } from '../api/system'
 import { ApiError, getCatProfile, updateCatName } from '../api/cat-profile'
 import type { CatProfile } from '../api/cat-profile'
 import ArticleRecallCarousel from '../components/ArticleRecallCarousel.vue'
+import WritingActivityHeatmap from '../components/WritingActivityHeatmap.vue'
 
 const checking = ref(false)
 const status = ref<SystemStatus | null>(null)
@@ -87,6 +88,8 @@ onMounted(() => {
           <span class="cat-caption">YOUR LITTLE PARTNER</span>
         </div>
       </section>
+
+      <WritingActivityHeatmap />
 
       <ArticleRecallCarousel />
 

@@ -51,6 +51,11 @@ public class GlobalExceptionHandler {
             Map.entry("Page size must be between 1 and 100.", "PAGE_SIZE_INVALID"),
             Map.entry("Page size must be a number.", "PAGE_SIZE_INVALID"),
             Map.entry("Requested page is too large.", "PAGE_TOO_LARGE"),
+            Map.entry("Activity start date is required.", "ACTIVITY_START_DATE_REQUIRED"),
+            Map.entry("Activity end date is required.", "ACTIVITY_END_DATE_REQUIRED"),
+            Map.entry("Activity start date must not be after end date.", "ACTIVITY_DATE_RANGE_INVALID"),
+            Map.entry("Activity date range must not exceed 366 days.", "ACTIVITY_DATE_RANGE_TOO_LARGE"),
+            Map.entry("Activity date is invalid.", "ACTIVITY_DATE_INVALID"),
             Map.entry("Recall limit must be between 1 and 50.", "RECALL_LIMIT_INVALID"),
             Map.entry("Recall limit must be a number.", "RECALL_LIMIT_INVALID"),
             Map.entry("Personal record was not found.", "PERSONAL_RECORD_NOT_FOUND"),
@@ -85,6 +90,7 @@ public class GlobalExceptionHandler {
             case "pageSize" -> "Page size must be a number.";
             case "limit" -> "Recall limit must be a number.";
             case "date" -> "Emotion date is invalid.";
+            case "startDate", "endDate" -> "Activity date is invalid.";
             default -> "Request parameter is invalid.";
         };
         String code = ERROR_CODES.getOrDefault(message, "REQUEST_PARAMETER_INVALID");

@@ -1,7 +1,10 @@
 package com.desktopcat.server.record.service.impl;
 
+import com.desktopcat.server.record.dao.PersonalRecordActivityDO;
 import com.desktopcat.server.record.dao.PersonalRecordDao;
 import com.desktopcat.server.record.dao.PersonalRecordDO;
+import com.desktopcat.server.record.dto.PersonalRecordActivityDayDto;
+import com.desktopcat.server.record.dto.PersonalRecordActivityDto;
 import com.desktopcat.server.record.dto.PersonalRecordCreateDto;
 import com.desktopcat.server.record.dto.PersonalRecordDetailDto;
 import com.desktopcat.server.record.dto.PersonalRecordListItemDto;
@@ -9,6 +12,8 @@ import com.desktopcat.server.record.dto.PersonalRecordPageDto;
 import com.desktopcat.server.record.dto.PersonalRecordRecallDto;
 import com.desktopcat.server.record.dto.PersonalRecordUpdateDto;
 import com.desktopcat.server.record.service.PersonalRecordService;
+import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -42,6 +47,7 @@ public class PersonalRecordServiceImpl implements PersonalRecordService {
     private static final int MAX_PAGE_SIZE = 100;
     private static final int MAX_RECALL_LIMIT = 50;
     private static final int EXCERPT_LENGTH = 160;
+    private static final int MAX_ACTIVITY_RANGE_DAYS = 366;
 
     private final PersonalRecordDao personalRecordDao;
 
@@ -108,6 +114,40 @@ public class PersonalRecordServiceImpl implements PersonalRecordService {
         // List.copyOf 防止调用方增删分页结果中的元素。
         return new PersonalRecordPageDto(List.copyOf(items), normalizedPage,
                 normalizedPageSize, total, totalPages);
+    }
+
+    /**
+     * 查询一段日期范围内每天写了多少篇文章。数据库只返回有记录的日期，
+     * 没有写作的日期由前端绘制为空白格子。
+     */
+    @Override
+    public PersonalRecordActivityDto getActivity(
+            LocalDate startDate, LocalDate endDate, String recordType) {
+        if (startDate == null) {
+            throw badRequest("Activity start date is required.");
+        }
+        if (endDate == null) {
+            throw badRequest("Activity end date is required.");
+        }
+        if (startDate.isAfter(endDate)) {
+            throw badRequest("Activity start date must not be after end date.");
+        }
+
+        long rangeDays = ChronoUnit.DAYS.between(startDate, endDate) + 1;
+        if (rangeDays > MAX_ACTIVITY_RANGE_DAYS) {
+            throw badRequest("Activity date range must not exceed 366 days.");
+        }
+
+        String normalizedRecordType = normalizeRequiredRecordType(recordType);
+        List<PersonalRecordActivityDayDto> days = personalRecordDao
+                .selectDailyActivity(normalizedRecordType, startDate, endDate).stream()
+                .map(this::toActivityDayDto)
+                .toList();
+        long totalRecords = days.stream()
+                .mapToLong(PersonalRecordActivityDayDto::recordCount)
+                .sum();
+        return new PersonalRecordActivityDto(
+                startDate, endDate, totalRecords, days.size(), List.copyOf(days));
     }
 
     /**
@@ -278,6 +318,12 @@ public class PersonalRecordServiceImpl implements PersonalRecordService {
                 createExcerpt(record.getContent()), record.getRecordDate(), record.getMood(),
                 Boolean.TRUE.equals(record.getRecallEnabled()), Boolean.TRUE.equals(record.getRagEnabled()),
                 record.getVersion(), record.getCreatedAt(), record.getUpdatedAt());
+    }
+
+    /** DAO 聚合结果转换为写作足迹中的单日数据。 */
+    private PersonalRecordActivityDayDto toActivityDayDto(PersonalRecordActivityDO activity) {
+        return new PersonalRecordActivityDayDto(
+                activity.getRecordDate(), activity.getRecordCount());
     }
 
     /**

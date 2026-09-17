@@ -84,6 +84,18 @@
     </if>
   </select>
 
+  <select id="selectDailyActivity"
+          resultType="com.desktopcat.server.record.dao.PersonalRecordActivityDO">
+    SELECT record_date,
+           COUNT(*) AS record_count
+    FROM personal_record
+    WHERE deleted_at IS NULL
+      AND record_type = #{recordType}
+      AND record_date BETWEEN #{startDate} AND #{endDate}
+    GROUP BY record_date
+    ORDER BY record_date
+  </select>
+
   <update id="updateRecord" parameterType="com.desktopcat.server.record.dao.PersonalRecordDO">
     UPDATE personal_record
     SET record_type = #{recordType},

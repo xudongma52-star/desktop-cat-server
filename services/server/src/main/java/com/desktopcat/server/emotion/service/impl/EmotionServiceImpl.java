@@ -21,6 +21,7 @@ import org.springframework.web.server.ResponseStatusException;
 @Profile("postgres")
 public class EmotionServiceImpl implements EmotionService {
     private static final Logger log = LoggerFactory.getLogger(EmotionServiceImpl.class);
+    //固定上海时区
     private static final ZoneId USER_ZONE = ZoneId.of("Asia/Shanghai");
 
     private final EmotionDao emotionDao;
@@ -40,6 +41,7 @@ public class EmotionServiceImpl implements EmotionService {
         }
 
         String content = request.content().strip();
+        //获取当前 UTC 时间，Instant是java时间类型
         Instant now = Instant.now();
         EmotionDO emotion = new EmotionDO(null, content, LocalDate.now(USER_ZONE), now);
         int insertedRows = emotionDao.insert(emotion);

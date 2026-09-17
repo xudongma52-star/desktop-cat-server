@@ -16,6 +16,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.desktopcat.server.record.controller.PersonalRecordController;
+import com.desktopcat.server.record.dao.PersonalRecordActivityDO;
 import com.desktopcat.server.record.dao.PersonalRecordDO;
 import com.desktopcat.server.record.dao.PersonalRecordDao;
 import com.desktopcat.server.record.service.PersonalRecordService;
@@ -28,7 +29,9 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Collectors;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
@@ -66,6 +69,19 @@ class PersonalRecordControllerTest {
             int offset = invocation.getArgument(2);
             int limit = invocation.getArgument(3);
             return filtered.stream().skip(offset).limit(limit).map(this::copy).toList();
+        });
+        when(personalRecordDao.selectDailyActivity(any(), any(), any())).thenAnswer(invocation -> {
+            String recordType = invocation.getArgument(0);
+            LocalDate startDate = invocation.getArgument(1);
+            LocalDate endDate = invocation.getArgument(2);
+            Map<LocalDate, Long> counts = filteredRecords(recordType, null).stream()
+                    .filter(record -> !record.getRecordDate().isBefore(startDate))
+                    .filter(record -> !record.getRecordDate().isAfter(endDate))
+                    .collect(Collectors.groupingBy(
+                            PersonalRecordDO::getRecordDate, TreeMap::new, Collectors.counting()));
+            return counts.entrySet().stream()
+                    .map(entry -> new PersonalRecordActivityDO(entry.getKey(), entry.getValue()))
+                    .toList();
         });
         when(personalRecordDao.updateRecord(any(PersonalRecordDO.class))).thenAnswer(invocation -> {
             PersonalRecordDO requested = invocation.getArgument(0);
@@ -242,6 +258,44 @@ class PersonalRecordControllerTest {
                 .andExpect(jsonPath("$[0].excerpt").isNotEmpty())
                 .andExpect(jsonPath("$[0].excerpt").value(org.hamcrest.Matchers.endsWith("…")))
                 .andExpect(jsonPath("$[0]", not(hasKey("content"))));
+    }
+
+    @Test
+    void returnsDailyWritingActivityWithoutLoadingArticleContent() throws Exception {
+        createRecord("九月十六日之一", "今天的第一篇日记", false, "2026-09-16");
+        createRecord("九月十六日之二", "今天的第二篇日记", false, "2026-09-16");
+        createRecord("九月十七日", "新的一天", false, "2026-09-17");
+
+        mvc.perform(get("/api/records/activity")
+                        .param("startDate", "2026-09-01")
+                        .param("endDate", "2026-09-30")
+                        .param("recordType", "DIARY"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.startDate").value("2026-09-01"))
+                .andExpect(jsonPath("$.endDate").value("2026-09-30"))
+                .andExpect(jsonPath("$.totalRecords").value(3))
+                .andExpect(jsonPath("$.activeDays").value(2))
+                .andExpect(jsonPath("$.days", hasSize(2)))
+                .andExpect(jsonPath("$.days[0].recordDate").value("2026-09-16"))
+                .andExpect(jsonPath("$.days[0].recordCount").value(2))
+                .andExpect(jsonPath("$.days[1].recordDate").value("2026-09-17"))
+                .andExpect(jsonPath("$.days[1].recordCount").value(1))
+                .andExpect(jsonPath("$.days[0]", not(hasKey("content"))));
+    }
+
+    @Test
+    void rejectsInvalidWritingActivityDateRanges() throws Exception {
+        mvc.perform(get("/api/records/activity")
+                        .param("startDate", "2026-09-17")
+                        .param("endDate", "2026-09-01"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("ACTIVITY_DATE_RANGE_INVALID"));
+
+        mvc.perform(get("/api/records/activity")
+                        .param("startDate", "2025-01-01")
+                        .param("endDate", "2026-09-17"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("ACTIVITY_DATE_RANGE_TOO_LARGE"));
     }
 
     private void createRecord(String title, String content, boolean recallEnabled, String recordDate)

@@ -1,11 +1,13 @@
 package com.desktopcat.server.record.controller;
 
+import com.desktopcat.server.record.dto.PersonalRecordActivityDto;
 import com.desktopcat.server.record.dto.PersonalRecordCreateDto;
 import com.desktopcat.server.record.dto.PersonalRecordDetailDto;
 import com.desktopcat.server.record.dto.PersonalRecordPageDto;
 import com.desktopcat.server.record.dto.PersonalRecordRecallDto;
 import com.desktopcat.server.record.dto.PersonalRecordUpdateDto;
 import com.desktopcat.server.record.service.PersonalRecordService;
+import java.time.LocalDate;
 import java.util.List;
 import org.springframework.context.annotation.Profile;
 import org.springframework.http.HttpStatus;
@@ -67,6 +69,22 @@ public class PersonalRecordController {
             @RequestParam(defaultValue = "12") Integer pageSize,
             @RequestParam(required = false) String recordType) {
         return personalRecordService.listRecords(page, pageSize, recordType);
+    }
+
+    /**
+     * GET /api/records/activity：按天统计指定日期范围内的写作数量。
+     *
+     * @param startDate 统计开始日期，包含当天
+     * @param endDate 统计结束日期，包含当天
+     * @param recordType 文章类型，默认只统计日记
+     * @return 有写作记录的日期、每天篇数及范围汇总
+     */
+    @GetMapping("/activity")
+    public PersonalRecordActivityDto getActivity(
+            @RequestParam(required = false) LocalDate startDate,
+            @RequestParam(required = false) LocalDate endDate,
+            @RequestParam(defaultValue = "DIARY") String recordType) {
+        return personalRecordService.getActivity(startDate, endDate, recordType);
     }
 
     /**

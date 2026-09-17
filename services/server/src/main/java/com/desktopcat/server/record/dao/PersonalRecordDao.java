@@ -1,5 +1,6 @@
 package com.desktopcat.server.record.dao;
 
+import java.time.LocalDate;
 import java.util.List;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
@@ -19,6 +20,11 @@ public interface PersonalRecordDao {
     long countActive(
             @Param("recordType") String recordType,
             @Param("recallEnabled") Boolean recallEnabled);
+
+    List<PersonalRecordActivityDO> selectDailyActivity(
+            @Param("recordType") String recordType,
+            @Param("startDate") LocalDate startDate,
+            @Param("endDate") LocalDate endDate);
 
     int updateRecord(PersonalRecordDO record);
 
