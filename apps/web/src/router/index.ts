@@ -4,6 +4,7 @@ import RecordDetailView from '../views/RecordDetailView.vue'
 import RecordEditorView from '../views/RecordEditorView.vue'
 import RecordListView from '../views/RecordListView.vue'
 import EmotionDayView from '../views/EmotionDayView.vue'
+import ReminderView from '../views/ReminderView.vue'
 
 export const router = createRouter({
   history: createWebHistory(),
@@ -15,6 +16,7 @@ export const router = createRouter({
     { path: '/records/:recordId', name: 'record-detail', component: RecordDetailView },
     { path: '/records/:recordId/edit', name: 'record-edit', component: RecordEditorView },
     { path: '/emotions', name: 'emotions', component: EmotionDayView },
+    { path: '/reminders', name: 'reminders', component: ReminderView },
     { path: '/:pathMatch(.*)*', redirect: '/' },
   ],
 })

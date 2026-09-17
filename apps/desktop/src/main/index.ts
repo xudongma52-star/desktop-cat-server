@@ -24,6 +24,7 @@ import {
 import type { CompanionInfo } from '../shared/companion'
 import type { CatProfile } from '../shared/cat-profile'
 import type { Emotion } from '../shared/emotion'
+import type { Reminder } from '../shared/reminder'
 
 const COMPACT_WINDOW_WIDTH = 176
 const COMPACT_WINDOW_HEIGHT = 176
@@ -37,6 +38,9 @@ const ASSISTANT_API_URL = process.env.DESKTOP_CAT_API_URL ?? 'http://127.0.0.1:8
 const CAT_PROFILE_API_URL = `${ASSISTANT_API_URL}/api/cat/profile`
 const ASSISTANT_EVENTS_API_URL = `${ASSISTANT_API_URL}/api/events`
 const EMOTIONS_API_URL = `${ASSISTANT_API_URL}/api/emotions`
+const REMINDERS_API_URL = `${ASSISTANT_API_URL}/api/reminders`
+const REMINDER_SYNC_INTERVAL_MS = 30_000
+const REMINDER_DUE_CHECK_INTERVAL_MS = 5_000
 const DEFAULT_CAT_PROFILE: CatProfile = {
   profileId: 1,
   catName: '小饼干',
@@ -50,6 +54,7 @@ type ActivityPanelSide = 'left' | 'right'
 type CompanionState = { firstMetDate: string }
 type ServerEvent = { event: string; data: string }
 type CatProfileUpdatedEvent = { profileId: number; version: number }
+type ReminderCache = { reminders: Reminder[]; notifiedTokens: string[] }
 
 let catWindow: BrowserWindow | null = null
 let tray: Tray | null = null
@@ -72,6 +77,12 @@ let profileEventReconnectAttempt = 0
 let profileEventConnectionFailed = false
 let profileSyncInFlight: Promise<void> | undefined
 let profileSyncFailed = false
+let reminders: Reminder[] = []
+let notifiedReminderTokens = new Set<string>()
+let reminderSyncTimer: NodeJS.Timeout | undefined
+let reminderDueCheckTimer: NodeJS.Timeout | undefined
+let reminderSyncFailed = false
+let reminderSyncInFlight: Promise<void> | undefined
 
 let currentActivity: CatActivitySnapshot = {
   id: 'idle',
@@ -93,6 +104,10 @@ function getCatProfilePath(): string {
   return join(app.getPath('userData'), 'cat-profile.json')
 }
 
+function getReminderCachePath(): string {
+  return join(app.getPath('userData'), 'reminder-cache.json')
+}
+
 function isCatProfile(value: unknown): value is CatProfile {
   if (!value || typeof value !== 'object') return false
   const candidate = value as Partial<CatProfile>
@@ -109,6 +124,137 @@ function isEmotion(value: unknown): value is Emotion {
     && typeof candidate.content === 'string' && candidate.content.trim().length > 0
     && typeof candidate.recordDate === 'string'
     && typeof candidate.createdAt === 'string'
+}
+
+function isReminder(value: unknown): value is Reminder {
+  if (!value || typeof value !== 'object') return false
+  const candidate = value as Partial<Reminder>
+  return Number.isSafeInteger(candidate.reminderId) && (candidate.reminderId ?? 0) > 0
+    && typeof candidate.content === 'string' && candidate.content.trim().length > 0
+    && typeof candidate.remindAt === 'string' && !Number.isNaN(Date.parse(candidate.remindAt))
+    && candidate.status === 'PENDING'
+    && Number.isSafeInteger(candidate.version) && (candidate.version ?? -1) >= 0
+}
+
+function reminderToken(reminder: Reminder): string {
+  // 版本进入标记后，同一版本只提醒一次；网站修改后新版本仍可按新时间再次提醒。
+  return `${reminder.reminderId}:${reminder.version}`
+}
+
+function loadReminderCache(): void {
+  const cachePath = getReminderCachePath()
+  if (!existsSync(cachePath)) return
+  try {
+    const candidate = JSON.parse(readFileSync(cachePath, 'utf8')) as Partial<ReminderCache>
+    reminders = Array.isArray(candidate.reminders) ? candidate.reminders.filter(isReminder) : []
+    notifiedReminderTokens = new Set(
+      Array.isArray(candidate.notifiedTokens)
+        ? candidate.notifiedTokens.filter((token): token is string => typeof token === 'string')
+        : [],
+    )
+  } catch (error) {
+    console.error('Failed to read the cached reminders.', error)
+  }
+}
+
+function saveReminderCache(): void {
+  const cachePath = getReminderCachePath()
+  try {
+    mkdirSync(dirname(cachePath), { recursive: true })
+    const cache: ReminderCache = {
+      reminders,
+      notifiedTokens: [...notifiedReminderTokens],
+    }
+    writeFileSync(cachePath, JSON.stringify(cache, null, 2), 'utf8')
+  } catch (error) {
+    console.error('Failed to save the reminder cache.', error)
+  }
+}
+
+function checkDueReminders(): void {
+  if (!catWindow || catWindow.isDestroyed() || catWindow.webContents.isLoading()) return
+  const now = Date.now()
+  const dueReminder = reminders.find((reminder) => {
+    const token = reminderToken(reminder)
+    return Date.parse(reminder.remindAt) <= now && !notifiedReminderTokens.has(token)
+  })
+  if (!dueReminder) return
+
+  notifiedReminderTokens.add(reminderToken(dueReminder))
+  saveReminderCache()
+  showCat()
+  catWindow.webContents.send('desktop-cat:reminder-due', dueReminder)
+}
+
+async function performReminderSync(): Promise<void> {
+  try {
+    const response = await fetch(`${REMINDERS_API_URL}?scope=PENDING`, {
+      signal: AbortSignal.timeout(5_000),
+    })
+    if (!response.ok) throw new Error(`Reminder request returned HTTP ${response.status}.`)
+    const candidate: unknown = await response.json()
+    if (!Array.isArray(candidate) || !candidate.every(isReminder)) {
+      throw new Error('Reminder response is invalid.')
+    }
+
+    reminders = candidate
+    const activeTokens = new Set(reminders.map(reminderToken))
+    // 只保留服务端仍未完成的版本，避免缓存随着已完成或已删除事项一直增长。
+    notifiedReminderTokens = new Set(
+      [...notifiedReminderTokens].filter((token) => activeTokens.has(token)),
+    )
+    saveReminderCache()
+    checkDueReminders()
+    if (reminderSyncFailed) console.info('Reminder synchronization recovered.')
+    reminderSyncFailed = false
+  } catch (error) {
+    if (!reminderSyncFailed) {
+      console.warn('Reminder synchronization is unavailable; using cached reminders.', error)
+    }
+    reminderSyncFailed = true
+    checkDueReminders()
+  }
+}
+
+async function syncReminders(): Promise<void> {
+  if (reminderSyncInFlight) return reminderSyncInFlight
+  const currentSync = performReminderSync()
+  reminderSyncInFlight = currentSync
+  try {
+    await currentSync
+  } finally {
+    if (reminderSyncInFlight === currentSync) reminderSyncInFlight = undefined
+  }
+}
+
+async function completeReminder(reminderId: number, version: number): Promise<Reminder> {
+  const response = await fetch(`${REMINDERS_API_URL}/${reminderId}/complete`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ version }),
+    signal: AbortSignal.timeout(5_000),
+  })
+  if (!response.ok) throw new Error(`Complete reminder request returned HTTP ${response.status}.`)
+  const candidate: unknown = await response.json()
+  if (!candidate || typeof candidate !== 'object') throw new Error('Complete reminder response is invalid.')
+  const completed = candidate as Partial<Reminder>
+  if (completed.status !== 'COMPLETED' || completed.reminderId !== reminderId) {
+    throw new Error('Complete reminder response is invalid.')
+  }
+  reminders = reminders.filter((reminder) => reminder.reminderId !== reminderId)
+  saveReminderCache()
+  void syncReminders()
+  return completed as Reminder
+}
+
+function startReminderSync(): void {
+  void syncReminders()
+  reminderSyncTimer = setInterval(() => void syncReminders(), REMINDER_SYNC_INTERVAL_MS)
+  reminderDueCheckTimer = setInterval(checkDueReminders, REMINDER_DUE_CHECK_INTERVAL_MS)
+}
+
+function resumeReminderSync(): void {
+  void syncReminders()
 }
 
 async function createEmotion(content: string): Promise<Emotion> {
@@ -826,6 +972,17 @@ function registerIpcHandlers(): void {
     return createEmotion(content.trim())
   })
 
+  ipcMain.handle('desktop-cat:complete-reminder', (event, reminderId: unknown, version: unknown) => {
+    if (!isSenderCatWindow(event.sender)) throw new Error('Reminder access denied.')
+    if (!Number.isSafeInteger(reminderId) || (reminderId as number) <= 0) {
+      throw new Error('Reminder id is invalid.')
+    }
+    if (!Number.isSafeInteger(version) || (version as number) < 0) {
+      throw new Error('Reminder version is invalid.')
+    }
+    return completeReminder(reminderId as number, version as number)
+  })
+
   ipcMain.handle('desktop-cat:request-activity', (event, activityId: unknown) => {
     if (!isSenderCatWindow(event.sender)) throw new Error('Activity access denied.')
     if (!isCatActivityId(activityId)) throw new Error('Unknown cat activity.')
@@ -844,11 +1001,14 @@ if (!hasSingleInstanceLock) {
     registerIpcHandlers()
     loadCompanionState()
     loadCatProfile()
+    loadReminderCache()
     createCatWindow()
     createTray()
     startActivity('idle')
     startCatProfileSync()
+    startReminderSync()
     powerMonitor.on('resume', reconnectProfileEvents)
+    powerMonitor.on('resume', resumeReminderSync)
     screen.on('display-removed', ensureWindowIsVisible)
     screen.on('display-metrics-changed', ensureWindowIsVisible)
   })
@@ -859,8 +1019,11 @@ app.on('before-quit', () => {
   if (savePositionTimer) clearTimeout(savePositionTimer)
   if (profileReconcileTimer) clearInterval(profileReconcileTimer)
   if (profileEventReconnectTimer) clearTimeout(profileEventReconnectTimer)
+  if (reminderSyncTimer) clearInterval(reminderSyncTimer)
+  if (reminderDueCheckTimer) clearInterval(reminderDueCheckTimer)
   profileEventAbortController?.abort()
   powerMonitor.removeListener('resume', reconnectProfileEvents)
+  powerMonitor.removeListener('resume', resumeReminderSync)
   clearActivityEndTimer()
   stopMovement()
   saveWindowPosition()

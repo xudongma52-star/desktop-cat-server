@@ -7,6 +7,7 @@ import type {
 import type { CompanionInfo } from '../shared/companion'
 import type { CatProfile } from '../shared/cat-profile'
 import type { Emotion } from '../shared/emotion'
+import type { Reminder } from '../shared/reminder'
 
 const desktopCatApi = {
   setIgnoreMouseEvents(ignore: boolean): void {
@@ -33,6 +34,9 @@ const desktopCatApi = {
   createEmotion(content: string): Promise<Emotion> {
     return ipcRenderer.invoke('desktop-cat:create-emotion', content) as Promise<Emotion>
   },
+  completeReminder(reminderId: number, version: number): Promise<Reminder> {
+    return ipcRenderer.invoke('desktop-cat:complete-reminder', reminderId, version) as Promise<Reminder>
+  },
   requestActivity(activityId: CatActivityId): Promise<CatActivityRequestResult> {
     return ipcRenderer.invoke('desktop-cat:request-activity', activityId) as Promise<CatActivityRequestResult>
   },
@@ -45,6 +49,11 @@ const desktopCatApi = {
     const wrappedListener = (_event: IpcRendererEvent, profile: CatProfile): void => listener(profile)
     ipcRenderer.on('desktop-cat:profile-changed', wrappedListener)
     return () => ipcRenderer.removeListener('desktop-cat:profile-changed', wrappedListener)
+  },
+  onReminderDue(listener: (reminder: Reminder) => void): () => void {
+    const wrappedListener = (_event: IpcRendererEvent, reminder: Reminder): void => listener(reminder)
+    ipcRenderer.on('desktop-cat:reminder-due', wrappedListener)
+    return () => ipcRenderer.removeListener('desktop-cat:reminder-due', wrappedListener)
   },
 }
 

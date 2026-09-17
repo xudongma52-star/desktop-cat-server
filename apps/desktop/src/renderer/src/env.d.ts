@@ -8,6 +8,7 @@ import type {
 import type { CompanionInfo } from '../../shared/companion'
 import type { CatProfile } from '../../shared/cat-profile'
 import type { Emotion } from '../../shared/emotion'
+import type { Reminder } from '../../shared/reminder'
 
 declare global {
   interface DesktopCatApi {
@@ -19,9 +20,11 @@ declare global {
     getCompanionInfo(): Promise<CompanionInfo>
     getCatProfile(): Promise<CatProfile>
     createEmotion(content: string): Promise<Emotion>
+    completeReminder(reminderId: number, version: number): Promise<Reminder>
     requestActivity(activityId: CatActivityId): Promise<CatActivityRequestResult>
     onActivityChanged(listener: (snapshot: CatActivitySnapshot) => void): () => void
     onCatProfileChanged(listener: (profile: CatProfile) => void): () => void
+    onReminderDue(listener: (reminder: Reminder) => void): () => void
   }
 
   interface Window {

@@ -13,6 +13,7 @@ import { RouterLink, RouterView } from 'vue-router'
         <RouterLink to="/">首页</RouterLink>
         <RouterLink to="/records">我的记录</RouterLink>
         <RouterLink to="/emotions">今天的内心</RouterLink>
+        <RouterLink to="/reminders">提醒</RouterLink>
         <RouterLink class="nav-action" to="/records/new">写下今天</RouterLink>
       </nav>
     </header>

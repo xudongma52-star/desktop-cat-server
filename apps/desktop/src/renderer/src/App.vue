@@ -6,6 +6,7 @@ import {
   type CatActivityId,
   type CatActivitySnapshot,
 } from '../../shared/cat-activity'
+import type { Reminder } from '../../shared/reminder'
 import { getAmbientMessages, TOUCH_MESSAGES } from './cat-dialogue'
 import eatingCatUrl from './assets/cat/cat-eat-pixel-v5.png'
 import groomingCatUrl from './assets/cat/cat-groom-pixel-v5.png'
@@ -49,6 +50,8 @@ const isSavingEmotion = ref(false)
 const emotionDraft = ref(window.localStorage.getItem(EMOTION_DRAFT_KEY) ?? '')
 const emotionError = ref('')
 const emotionInput = ref<HTMLTextAreaElement | null>(null)
+const dueReminder = ref<Reminder | null>(null)
+const isCompletingReminder = ref(false)
 
 const currentDefinition = computed(() => CAT_ACTIVITY_DEFINITIONS[activity.value.id])
 const catImageUrl = computed(() => catSpriteUrls[activity.value.id])
@@ -62,6 +65,7 @@ let closeMenuTimer: number | undefined
 let companionTimer: number | undefined
 let removeActivityListener: (() => void) | undefined
 let removeProfileListener: (() => void) | undefined
+let removeReminderListener: (() => void) | undefined
 let isIgnoringMouseEvents = false
 let activePointerId: number | undefined
 let dragStartScreenX = 0
@@ -141,6 +145,12 @@ function pickAmbientMessage(): string {
   return pickDialogue(getAmbientMessages())
 }
 
+function formatDueReminderMessage(reminder: Reminder): string {
+  const characters = Array.from(reminder.content)
+  const summary = characters.length > 42 ? `${characters.slice(0, 42).join('')}…` : reminder.content
+  return `到时间啦：${summary}`
+}
+
 function scheduleConversation(delayMs?: number): void {
   clearConversationTimer()
   const nextDelay = delayMs ?? Math.floor(
@@ -162,8 +172,12 @@ function showTemporaryMessage(nextMessage: string, holdMs = 4_800): void {
   message.value = nextMessage
   messageTimer = window.setTimeout(() => {
     messageTimer = undefined
-    message.value = pickAmbientMessage()
-    scheduleConversation()
+    if (dueReminder.value) {
+      message.value = formatDueReminderMessage(dueReminder.value)
+    } else {
+      message.value = pickAmbientMessage()
+      scheduleConversation()
+    }
   }, holdMs)
 }
 
@@ -219,6 +233,32 @@ async function submitEmotion(): Promise<void> {
     emotionError.value = '刚才没有保存成功，内容还在这里。'
   } finally {
     isSavingEmotion.value = false
+  }
+}
+
+async function handleDueReminder(reminder: Reminder): Promise<void> {
+  if (isActivityMenuOpen.value) await setActivityMenuOpen(false)
+  dueReminder.value = reminder
+  showTemporaryMessage(formatDueReminderMessage(reminder), 60_000)
+  playMeow()
+  setMousePassThrough(false)
+}
+
+async function completeDueReminder(): Promise<void> {
+  if (!dueReminder.value || isCompletingReminder.value) return
+  isCompletingReminder.value = true
+  try {
+    await window.desktopCat.completeReminder(
+      dueReminder.value.reminderId,
+      dueReminder.value.version,
+    )
+    dueReminder.value = null
+    showTemporaryMessage('完成啦！辛苦了，休息一下吧。', 7_000)
+  } catch (error) {
+    console.error('Failed to complete the reminder.', error)
+    showTemporaryMessage('刚才没有记成功，再点一次试试。', 7_000)
+  } finally {
+    isCompletingReminder.value = false
   }
 }
 
@@ -344,6 +384,9 @@ onMounted(async () => {
   removeProfileListener = window.desktopCat.onCatProfileChanged((profile) => {
     catName.value = profile.catName
   })
+  removeReminderListener = window.desktopCat.onReminderDue((reminder) => {
+    void handleDueReminder(reminder)
+  })
 
   try {
     catName.value = (await window.desktopCat.getCatProfile()).catName
@@ -362,6 +405,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('mouseleave', handleMouseLeave)
   removeActivityListener?.()
   removeProfileListener?.()
+  removeReminderListener?.()
   window.desktopCat.setMovementPaused(false)
   if (isActivityMenuOpen.value) void window.desktopCat.setActivityPanelOpen(false)
   if (reactionTimer) window.clearTimeout(reactionTimer)
@@ -382,10 +426,18 @@ onBeforeUnmount(() => {
     :class="[`state-${activity.id}`, { 'menu-open': isActivityMenuOpen, [`panel-${activityPanelSide}`]: isActivityMenuOpen }]"
   >
     <div class="cat-stage">
-      <p v-if="!isActivityMenuOpen" class="speech" role="status" data-interactive :title="`按住气泡拖动${catName}`">
+      <div v-if="!isActivityMenuOpen" class="speech" role="status" data-interactive :title="`按住气泡拖动${catName}`">
         <span>{{ message }}</span>
-        <small>{{ currentDefinition.icon }} {{ currentDefinition.label }}</small>
-      </p>
+        <button
+          v-if="dueReminder"
+          class="reminder-complete"
+          type="button"
+          data-interactive
+          :disabled="isCompletingReminder"
+          @click="completeDueReminder"
+        >{{ isCompletingReminder ? '记录中…' : '✓ 我做完了' }}</button>
+        <small v-else>{{ currentDefinition.icon }} {{ currentDefinition.label }}</small>
+      </div>
 
       <div v-if="!isActivityMenuOpen" class="drag-handle" data-interactive :title="`按住这里拖动${catName}`" />
 
@@ -520,6 +572,24 @@ onBeforeUnmount(() => {
   color: #9a765d;
   font-size: 8px;
 }
+
+.reminder-complete {
+  justify-self: center;
+  margin-top: 4px;
+  padding: 3px 7px;
+  border: 1px solid rgb(122 149 112 / 55%);
+  border-radius: 8px;
+  color: #587052;
+  background: #edf3e8;
+  font-size: 8px;
+  cursor: pointer;
+  pointer-events: auto;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+.reminder-complete:hover { color: #fff; background: #657d5d; }
+.reminder-complete:disabled { cursor: wait; opacity: .6; }
 
 .speech:active { cursor: grabbing; }
 

@@ -64,7 +64,23 @@ public class GlobalExceptionHandler {
             Map.entry("Personal record could not be created.", "PERSONAL_RECORD_CREATE_FAILED"),
             Map.entry("Emotion content is required.", "EMOTION_CONTENT_REQUIRED"),
             Map.entry("Emotion could not be created.", "EMOTION_CREATE_FAILED"),
-            Map.entry("Emotion date is invalid.", "EMOTION_DATE_INVALID"));
+            Map.entry("Emotion date is invalid.", "EMOTION_DATE_INVALID"),
+            Map.entry("Reminder id is required.", "REMINDER_ID_REQUIRED"),
+            Map.entry("Reminder id must be positive.", "REMINDER_ID_INVALID"),
+            Map.entry("Reminder id must be a number.", "REMINDER_ID_INVALID"),
+            Map.entry("Reminder content is required.", "REMINDER_CONTENT_REQUIRED"),
+            Map.entry("Reminder content must not exceed 200 characters.", "REMINDER_CONTENT_TOO_LONG"),
+            Map.entry("Reminder time is required.", "REMINDER_TIME_REQUIRED"),
+            Map.entry("Reminder scope must be TODAY or PENDING.", "REMINDER_SCOPE_INVALID"),
+            Map.entry("Reminder version is required.", "REMINDER_VERSION_REQUIRED"),
+            Map.entry("Reminder version must not be negative.", "REMINDER_VERSION_INVALID"),
+            Map.entry("Reminder version must be a number.", "REMINDER_VERSION_INVALID"),
+            Map.entry("Only pending reminders can be changed.", "REMINDER_NOT_PENDING"),
+            Map.entry("Reminder was not found.", "REMINDER_NOT_FOUND"),
+            Map.entry("Reminder has been updated. Refresh and try again.",
+                    "REMINDER_VERSION_CONFLICT"),
+            Map.entry("Reminder could not be created.", "REMINDER_CREATE_FAILED"),
+            Map.entry("Reminder could not be updated.", "REMINDER_UPDATE_FAILED"));
 
     @ExceptionHandler(ResponseStatusException.class)
     public ResponseEntity<ApiErrorResponse> handleStatus(
@@ -85,7 +101,10 @@ public class GlobalExceptionHandler {
             MethodArgumentTypeMismatchException exception, HttpServletRequest request) {
         String message = switch (exception.getName()) {
             case "recordId" -> "Record id must be a number.";
-            case "version" -> "Record version must be a number.";
+            case "reminderId" -> "Reminder id must be a number.";
+            case "version" -> request.getRequestURI().startsWith("/api/reminders")
+                    ? "Reminder version must be a number."
+                    : "Record version must be a number.";
             case "page" -> "Page must be a number.";
             case "pageSize" -> "Page size must be a number.";
             case "limit" -> "Recall limit must be a number.";

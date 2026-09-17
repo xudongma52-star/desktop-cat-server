@@ -2,21 +2,22 @@
 
 [![CI](https://github.com/xudongma52-star/desktop-cat-server/actions/workflows/ci.yml/badge.svg)](https://github.com/xudongma52-star/desktop-cat-server/actions/workflows/ci.yml)
 
-Vue 3 + Electron + Spring Boot 3 + JDK 21，使用原生 MyBatis。当前已实现个人文章网站、年度写作足迹、文章温馨回忆轮播、每日情绪站，以及一个可独立运行的 Windows 桌面猫。
+Vue 3 + Electron + Spring Boot 3 + JDK 21，使用原生 MyBatis。当前已实现个人文章网站、年度写作足迹、文章温馨回忆轮播、每日情绪站、待办提醒，以及一个可独立运行的 Windows 桌面猫。
 
 ## 当前范围
 
 - 已建立 Vue、TypeScript、Vite、Router 和 Pinia 前端，并完成首页、文章列表、创建、详情、编辑和删除页面。
 - 已建立 Spring Boot 3.5.16 后端，加入 Validation、Actuator、MyBatis Starter 3.0.5、Flyway 和 PostgreSQL 驱动。
-- 默认连接本机 PostgreSQL；应用启动时由 Flyway 依次执行 V1、V2、V3 迁移。需要脱离数据库开发时可显式启用 `local` 配置。
+- 默认连接本机 PostgreSQL；应用启动时由 Flyway 依次执行 V1、V2、V3、V4 迁移。需要脱离数据库开发时可显式启用 `local` 配置。
 - 已建立 Electron 桌面端：透明无边框窗口、置顶显示、透明区域鼠标穿透、拖动、真实猫叫、活动状态、自由移动、主动陪伴对话、托盘显隐与退出、窗口位置记忆和 Windows 安装包。
 - 当前 Q 版黑猫根据自己的猫照片生成，保留纯黑毛、圆脸、厚爪与琥珀眼；多组透明 PNG 精灵图配合 CSS 表现发呆、睡觉、舔毛、玩耍、吃冻干、散步和奔跑七种活动。
 - 已完成 `cat_profile` 资料表，可在网页修改小猫名字，并由 Java 通过 SSE 通知 Electron 实时同步；桌面端保留离线缓存。
 - 已完成 `personal_record` 文章表和完整 CRUD：可管理日记、心得与实习笔记，按类型筛选和分页，并分别设置是否加入温馨回忆、是否允许未来进入 RAG。
 - 首页写作足迹按日期统计最近 365 天的日记篇数，显示 53 周热力图、累计篇数和写作天数；统计直接聚合现有 `personal_record` 数据，不建立冗余统计表。
 - 已完成 `daily_emotion` 每日情绪表：可从桌面小猫的单一文本框快速记录一句话，并在网站按日期追溯当天和过去的内容。创建日期始终由 Java 按上海时区当天生成，不能补写过去或预写明天；情绪碎片与文章分开保存，不要求选择情绪类型，也不触发即时 AI 回复。
+- 已完成 `reminder` 待办提醒表和网站管理页：可创建、修改、完成和删除一次性提醒，并查看今天或全部未完成事项。桌面猫每 30 秒同步一次待办、每 5 秒检查到期时间；断网时继续使用本地缓存，到点会出现并喵一声，可直接标记完成。
 - 首页文章温馨回忆轮播会读取主动开启 `recall_enabled` 的记录，支持上一条、下一条、暂停和自动轮播；目前只包含文字文章。
-- 图片回忆轮播、RAG 实际检索、提醒、拖拽投喂冻干、登录和开机自启尚未实现；相关开关或接入位置只作为后续扩展边界。
+- 图片回忆轮播、重复提醒、RAG 实际检索、拖拽投喂冻干、登录和开机自启尚未实现；相关开关或接入位置只作为后续扩展边界。
 - 开发服务绑定本机地址，当前框架用于本地学习，正式发布前需补齐鉴权与部署配置。
 
 ## 环境
@@ -50,7 +51,7 @@ pnpm dev
 
 打开 [http://127.0.0.1:5173](http://127.0.0.1:5173)，应看到“前后端已连通”。启动任一服务的终端按 `Ctrl+C` 可停止该服务。
 
-后端接口：[运行状态](http://127.0.0.1:8080/api/system/status)、[小猫资料](http://127.0.0.1:8080/api/cat/profile)、[文章列表](http://127.0.0.1:8080/api/records)、[写作足迹](http://127.0.0.1:8080/api/records/activity?startDate=2025-09-18&endDate=2026-09-17&recordType=DIARY)、[文章回忆](http://127.0.0.1:8080/api/records/recalls)、[今日情绪](http://127.0.0.1:8080/api/emotions)、[SSE 事件流](http://127.0.0.1:8080/api/events)、[健康检查](http://127.0.0.1:8080/actuator/health)。请求字段、响应示例和错误码见 [接口文档](./接口文档.md)。
+后端接口：[运行状态](http://127.0.0.1:8080/api/system/status)、[小猫资料](http://127.0.0.1:8080/api/cat/profile)、[文章列表](http://127.0.0.1:8080/api/records)、[写作足迹](http://127.0.0.1:8080/api/records/activity?startDate=2025-09-18&endDate=2026-09-17&recordType=DIARY)、[文章回忆](http://127.0.0.1:8080/api/records/recalls)、[今日情绪](http://127.0.0.1:8080/api/emotions)、[今日提醒](http://127.0.0.1:8080/api/reminders?scope=TODAY)、[SSE 事件流](http://127.0.0.1:8080/api/events)、[健康检查](http://127.0.0.1:8080/actuator/health)。请求字段、响应示例和错误码见 [接口文档](./接口文档.md)。
 
 单独开发桌面猫：
 
@@ -59,7 +60,7 @@ cd D:\repository
 pnpm dev:desktop
 ```
 
-桌面猫启动时读取一次资料，之后保持一条 SSE 连接；收到更高版本的资料更新事件时才重新读取。断线后按 1、2、5、10、30 秒逐级重连，并每 5 分钟低频校准一次，避免漏掉离线期间的更新。后端不可用时读取本地缓存并继续运行。远程部署后通过 `DESKTOP_CAT_API_URL` 指定服务地址。单击小猫会播放真实猫叫并打开活动面板，可以请求发呆、睡觉、舔毛、玩耍、吃冻干、散步或奔跑；小猫可能按活动设定接受或拒绝，活动结束后会自主选择下一项。玩耍、散步和奔跑时，窗口会在当前显示器可用区域内自由移动、随机转向并在屏幕边缘折返；打开选择面板或拖动小猫时会暂停自动移动。活动面板右上角的记录按钮会打开一个文本框，按 Enter 发送、Shift+Enter 换行；发送失败时草稿保留在本地。
+桌面猫启动时读取一次资料，之后保持一条 SSE 连接；收到更高版本的资料更新事件时才重新读取。断线后按 1、2、5、10、30 秒逐级重连，并每 5 分钟低频校准一次，避免漏掉离线期间的更新。后端不可用时读取本地缓存并继续运行。桌面猫还会定期同步全部未完成提醒，使用 `reminder_id:version` 标记已经展示的版本；编辑提醒会生成新版本并重新进入到期检查，断网时仍可执行已缓存的提醒。远程部署后通过 `DESKTOP_CAT_API_URL` 指定服务地址。单击小猫会播放真实猫叫并打开活动面板，可以请求发呆、睡觉、舔毛、玩耍、吃冻干、散步或奔跑；小猫可能按活动设定接受或拒绝，活动结束后会自主选择下一项。玩耍、散步和奔跑时，窗口会在当前显示器可用区域内自由移动、随机转向并在屏幕边缘折返；打开选择面板或拖动小猫时会暂停自动移动。活动面板右上角的记录按钮会打开一个文本框，按 Enter 发送、Shift+Enter 换行；发送失败时草稿保留在本地。
 
 小猫会结合早晨、中午、下午、傍晚和夜间主动说不同的陪伴话语，通常每 16–32 秒更新一次，并尽量避免最近出现过的内容。摸摸小猫时会随机回应并暂时保留这句话，随后继续日常对话。活动面板只展示当前状态和可选活动，不显示倒计时及活动时长。
 
@@ -91,6 +92,8 @@ RecordEditorView.vue
 
 每日情绪的写入链路为 Electron 渲染进程 → preload 受限 API → Electron 主进程 → `POST /api/emotions` → Java 分层 → PostgreSQL。主进程负责网络请求，渲染进程不直接访问数据库。网站的 `/emotions` 页面通过 `GET /api/emotions` 读取当天内容。
 
+提醒的管理链路为 `ReminderView.vue` → `/api/reminders` → `ReminderController` → `ReminderService` 接口 → `ReminderServiceImpl` → `ReminderDao` + `ReminderDao.xml` → PostgreSQL。桌面端主进程读取 `scope=PENDING`，把未完成提醒缓存到用户目录并把到期事项发送给渲染进程；用户点击“我做完了”后由主进程调用完成接口。
+
 文章接口如下：
 
 | 方法与路径 | 用途 |
@@ -104,6 +107,11 @@ RecordEditorView.vue
 | `GET /api/records/recalls?limit=10` | 查询允许展示的文章回忆 |
 | `POST /api/emotions` | 保存一条当天情绪 |
 | `GET /api/emotions?date=2026-09-16` | 按日期查询情绪；不传日期时查询今天 |
+| `POST /api/reminders` | 创建一次性提醒 |
+| `GET /api/reminders?scope=TODAY` | 查询今天的提醒；`PENDING` 查询全部未完成提醒 |
+| `PUT /api/reminders/{reminderId}` | 按版本修改未完成提醒 |
+| `PATCH /api/reminders/{reminderId}/complete` | 按版本完成提醒 |
+| `DELETE /api/reminders/{reminderId}?version=` | 按版本逻辑删除提醒 |
 
 ## 项目目录
 
@@ -112,17 +120,17 @@ apps/web/                    Vue 前端
   src/api/                   HTTP 请求
   src/components/            文章温馨回忆轮播等组件
   src/router/                页面路由
-  src/views/                 首页、文章页面及当天内心页面
+  src/views/                 首页、文章、当天内心及提醒管理页面
 apps/desktop/                Electron 桌面猫
   src/main/                  窗口、托盘、位置保存和 IPC
   src/preload/               受限的渲染进程桥接 API
-  src/shared/                主进程和 Vue 共用的活动、情绪类型与规则
+  src/shared/                主进程和 Vue 共用的活动、情绪、提醒类型与规则
   src/renderer/              Vue 小猫界面与交互
     src/assets/cat/          根据自己的猫生成的透明 Q 版状态图
     src/assets/audio/        本地猫叫资源
   build/                     应用图标
 services/server/             Java 后端
-  src/main/java/             启动类及 cat、record、emotion 等业务模块
+  src/main/java/             启动类及 cat、record、emotion、reminder 等业务模块
     .../record/controller/   个人文章 HTTP 接口
     .../record/dto/          Controller 与 Service 共用的传输对象
     .../record/service/      Service 接口与 impl 实现
@@ -132,7 +140,7 @@ services/server/             Java 后端
   src/test/java/             后端集成测试
 ```
 
-小猫资料、个人文章和每日情绪后端都按 `controller`、`service` 接口、`service.impl`、`dao` 分层。请求和返回对象放在各模块的 `dto` 包；数据库对象使用 `DO` 后缀，与对应的 `Dao` 接口放在同一 `dao` 包，仅由 `service.impl` 和 `dao` 使用。具体 SQL 由 `mappers` 下与 Dao 同名的 XML 实现，不建立 DAO Impl；迁移位于 `db/migration`。后续数据库访问继续复用已有 DAO 能力，并遵守新增 Mapper/SQL 的审批约定。
+小猫资料、个人文章、每日情绪和待办提醒后端都按 `controller`、`service` 接口、`service.impl`、`dao` 分层。请求和返回对象放在各模块的 `dto` 包；数据库对象使用 `DO` 后缀，与对应的 `Dao` 接口放在同一 `dao` 包，仅由 `service.impl` 和 `dao` 使用。具体 SQL 由 `mappers` 下与 Dao 同名的 XML 实现，不建立 DAO Impl；迁移位于 `db/migration`。后续数据库访问继续复用已有 DAO 能力，并遵守新增 Mapper/SQL 的审批约定。
 
 ## 构建和测试
 
@@ -155,6 +163,8 @@ cd services\server
 
 2026-09-17 已验证：首页年度写作足迹生产构建通过，Maven Wrapper 测试共 13 项通过；真实 PostgreSQL 聚合查询返回正确的日记总数、写作天数和每日篇数。浏览器已检查 53 周格子、月份标签、当天标记和日期点击反馈，控制台无警告或错误。
 
+2026-09-17 已验证：提醒管理网页生产构建、桌面端类型检查与生产构建通过；Maven Wrapper `verify` 共 15 项测试通过并完成 JAR 打包。PostgreSQL 16.13 已执行 Flyway V4，真实 HTTP 请求覆盖提醒创建、今天与未完成查询、修改、完成和逻辑删除，验证数据已清理。浏览器已检查提醒页的桌面布局、表单、筛选和空状态。
+
 ## PostgreSQL 连接配置
 
 默认配置可直接连接当前本机数据库：
@@ -175,7 +185,7 @@ $env:DB_PASSWORD = '替换为本地数据库密码'
 .\mvnw.cmd spring-boot:run
 ```
 
-服务器部署时必须通过环境变量提供真实密码，不要把服务器密码提交到仓库。应用首次启动时，Flyway 会在目标数据库创建 `flyway_schema_history`、`cat_profile`、`personal_record` 和 `daily_emotion`；业务主键分别使用 `profile_id`、`record_id`、`emotion_id`，不使用裸 `id`。V1 创建小猫资料，V2 创建文章记录，V3 创建每日情绪及日期时间索引。
+服务器部署时必须通过环境变量提供真实密码，不要把服务器密码提交到仓库。应用首次启动时，Flyway 会在目标数据库创建 `flyway_schema_history`、`cat_profile`、`personal_record`、`daily_emotion` 和 `reminder`；业务主键分别使用 `profile_id`、`record_id`、`emotion_id`、`reminder_id`，不使用裸 `id`。V1 创建小猫资料，V2 创建文章记录，V3 创建每日情绪及日期时间索引，V4 创建待办提醒及有效提醒索引。
 
 需要临时使用不连接数据库的内存模式时：
 
