@@ -1,4 +1,4 @@
-package com.desktopcat.server.record.dao.dataobject;
+package com.desktopcat.server.record.dao;
 
 import java.time.Instant;
 import java.time.LocalDate;

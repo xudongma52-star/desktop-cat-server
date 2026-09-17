@@ -1,12 +1,14 @@
 package com.desktopcat.server.catprofile.controller;
 
+import com.desktopcat.server.catprofile.dto.CatProfileDto;
+import com.desktopcat.server.catprofile.dto.CatProfileUpdateDto;
 import com.desktopcat.server.catprofile.service.CatProfileService;
+import org.springframework.context.annotation.Profile;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.context.annotation.Profile;
 
 @RestController
 @Profile("postgres")
@@ -19,13 +21,12 @@ public class CatProfileController {
     }
 
     @GetMapping
-    public CatProfileResponse getPrimaryProfile() {
-        return CatProfileResponse.from(service.getPrimaryProfile());
+    public CatProfileDto getPrimaryProfile() {
+        return service.getPrimaryProfile();
     }
 
     @PatchMapping("/name")
-    public CatProfileResponse updatePrimaryName(@RequestBody UpdateCatNameRequest request) {
-        return CatProfileResponse.from(service.updatePrimaryName(
-                request.profileId(), request.catName(), request.version()));
+    public CatProfileDto updatePrimaryName(@RequestBody CatProfileUpdateDto request) {
+        return service.updatePrimaryName(request);
     }
 }

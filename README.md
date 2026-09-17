@@ -130,7 +130,7 @@ services/server/             Java 后端
   src/test/java/             后端集成测试
 ```
 
-小猫资料、个人文章和每日情绪后端都按 `controller`、`service` 接口、`service.impl`、`dao` 分层。请求和返回对象放在各模块的 `dto` 包，数据库映射对象单独放在 `dao.dataobject`，仅由 `service.impl` 和 `dao` 使用。DAO 层只保留数据库对象和 MyBatis 接口，具体 SQL 由 `mappers` 下的 XML 实现，不建立 DAO Impl；迁移位于 `db/migration`。后续数据库访问继续复用已有 DAO 能力，并遵守新增 Mapper/SQL 的审批约定。
+小猫资料、个人文章和每日情绪后端都按 `controller`、`service` 接口、`service.impl`、`dao` 分层。请求和返回对象放在各模块的 `dto` 包；数据库对象使用 `DO` 后缀，与对应的 `Dao` 接口放在同一 `dao` 包，仅由 `service.impl` 和 `dao` 使用。具体 SQL 由 `mappers` 下与 Dao 同名的 XML 实现，不建立 DAO Impl；迁移位于 `db/migration`。后续数据库访问继续复用已有 DAO 能力，并遵守新增 Mapper/SQL 的审批约定。
 
 ## 构建和测试
 

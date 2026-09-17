@@ -1,7 +1,7 @@
 package com.desktopcat.server.emotion.service.impl;
 
 import com.desktopcat.server.emotion.dao.EmotionDao;
-import com.desktopcat.server.emotion.dao.dataobject.EmotionDO;
+import com.desktopcat.server.emotion.dao.EmotionDO;
 import com.desktopcat.server.emotion.dto.EmotionCreateDto;
 import com.desktopcat.server.emotion.dto.EmotionDto;
 import com.desktopcat.server.emotion.service.EmotionService;

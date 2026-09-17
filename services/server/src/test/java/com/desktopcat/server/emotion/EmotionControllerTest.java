@@ -12,7 +12,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.desktopcat.server.emotion.controller.EmotionController;
 import com.desktopcat.server.emotion.dao.EmotionDao;
-import com.desktopcat.server.emotion.dao.dataobject.EmotionDO;
+import com.desktopcat.server.emotion.dao.EmotionDO;
 import com.desktopcat.server.emotion.service.EmotionService;
 import com.desktopcat.server.emotion.service.impl.EmotionServiceImpl;
 import com.desktopcat.server.web.GlobalExceptionHandler;

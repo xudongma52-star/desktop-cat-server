@@ -1,6 +1,5 @@
 package com.desktopcat.server.emotion.dao;
 
-import com.desktopcat.server.emotion.dao.dataobject.EmotionDO;
 import java.time.LocalDate;
 import java.util.List;
 import org.apache.ibatis.annotations.Mapper;

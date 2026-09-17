@@ -13,7 +13,7 @@
     )
   </insert>
 
-  <select id="selectByDate" resultType="com.desktopcat.server.emotion.dao.dataobject.EmotionDO">
+  <select id="selectByDate" resultType="com.desktopcat.server.emotion.dao.EmotionDO">
     SELECT emotion_id,
            content,
            record_date,

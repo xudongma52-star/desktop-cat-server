@@ -1,4 +1,4 @@
-package com.desktopcat.server.emotion.dao.dataobject;
+package com.desktopcat.server.emotion.dao;
 
 import java.time.Instant;
 import java.time.LocalDate;

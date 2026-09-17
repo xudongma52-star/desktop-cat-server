@@ -29,7 +29,7 @@
     updated_at
   </sql>
 
-  <insert id="insertRecord" parameterType="com.desktopcat.server.record.dao.dataobject.PersonalRecordDO"
+  <insert id="insertRecord" parameterType="com.desktopcat.server.record.dao.PersonalRecordDO"
           useGeneratedKeys="true" keyProperty="recordId" keyColumn="record_id">
     INSERT INTO personal_record (
       record_type,
@@ -50,14 +50,14 @@
     )
   </insert>
 
-  <select id="selectActiveById" resultType="com.desktopcat.server.record.dao.dataobject.PersonalRecordDO">
+  <select id="selectActiveById" resultType="com.desktopcat.server.record.dao.PersonalRecordDO">
     SELECT <include refid="activeRecordColumns"/>
     FROM personal_record
     WHERE record_id = #{recordId}
       AND deleted_at IS NULL
   </select>
 
-  <select id="selectActivePage" resultType="com.desktopcat.server.record.dao.dataobject.PersonalRecordDO">
+  <select id="selectActivePage" resultType="com.desktopcat.server.record.dao.PersonalRecordDO">
     SELECT <include refid="activeRecordSummaryColumns"/>
     FROM personal_record
     WHERE deleted_at IS NULL
@@ -84,7 +84,7 @@
     </if>
   </select>
 
-  <update id="updateRecord" parameterType="com.desktopcat.server.record.dao.dataobject.PersonalRecordDO">
+  <update id="updateRecord" parameterType="com.desktopcat.server.record.dao.PersonalRecordDO">
     UPDATE personal_record
     SET record_type = #{recordType},
         title = #{title},

@@ -16,7 +16,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.desktopcat.server.record.controller.PersonalRecordController;
-import com.desktopcat.server.record.dao.dataobject.PersonalRecordDO;
+import com.desktopcat.server.record.dao.PersonalRecordDO;
 import com.desktopcat.server.record.dao.PersonalRecordDao;
 import com.desktopcat.server.record.service.PersonalRecordService;
 import com.desktopcat.server.record.service.impl.PersonalRecordServiceImpl;

@@ -1,7 +1,7 @@
 package com.desktopcat.server.record.service.impl;
 
 import com.desktopcat.server.record.dao.PersonalRecordDao;
-import com.desktopcat.server.record.dao.dataobject.PersonalRecordDO;
+import com.desktopcat.server.record.dao.PersonalRecordDO;
 import com.desktopcat.server.record.dto.PersonalRecordCreateDto;
 import com.desktopcat.server.record.dto.PersonalRecordDetailDto;
 import com.desktopcat.server.record.dto.PersonalRecordListItemDto;
