@@ -537,6 +537,37 @@ function getCurrentWindowSize(): { width: number; height: number } {
     : { width: COMPACT_WINDOW_WIDTH, height: COMPACT_WINDOW_HEIGHT }
 }
 
+function normalizeScreenCoordinate(value: number): number {
+  const rounded = Math.round(value)
+  return Object.is(rounded, -0) ? 0 : rounded
+}
+
+function constrainPositionToDisplay(position: WindowPosition): WindowPosition {
+  const { width, height } = getCurrentWindowSize()
+  const center = {
+    x: normalizeScreenCoordinate(position.x + width / 2),
+    y: normalizeScreenCoordinate(position.y + height / 2),
+  }
+  const { workArea } = screen.getDisplayNearestPoint(center)
+  const maximumX = Math.max(workArea.x, workArea.x + workArea.width - width)
+  const maximumY = Math.max(workArea.y, workArea.y + workArea.height - height)
+
+  return {
+    x: normalizeScreenCoordinate(Math.min(Math.max(position.x, workArea.x), maximumX)),
+    y: normalizeScreenCoordinate(Math.min(Math.max(position.y, workArea.y), maximumY)),
+  }
+}
+
+function setCatWindowPosition(position: WindowPosition): void {
+  if (!catWindow || catWindow.isDestroyed()) return
+  const normalizedPosition = {
+    x: normalizeScreenCoordinate(position.x),
+    y: normalizeScreenCoordinate(position.y),
+  }
+  catWindow.setPosition(normalizedPosition.x, normalizedPosition.y, false)
+  precisePosition = normalizedPosition
+}
+
 function intersectsEnough(position: WindowPosition, workArea: Rectangle): boolean {
   const { width, height } = getCurrentWindowSize()
   const overlapWidth = Math.min(position.x + width, workArea.x + workArea.width)
@@ -552,15 +583,18 @@ function isPositionVisible(position: WindowPosition): boolean {
 
 function getDefaultPosition(): WindowPosition {
   const { workArea } = screen.getPrimaryDisplay()
+  const { width, height } = getCurrentWindowSize()
   return {
-    x: workArea.x + workArea.width - COMPACT_WINDOW_WIDTH - 16,
-    y: workArea.y + workArea.height - COMPACT_WINDOW_HEIGHT - 16,
+    x: workArea.x + workArea.width - width - 16,
+    y: workArea.y + workArea.height - height - 16,
   }
 }
 
 function getInitialPosition(): WindowPosition {
   const savedPosition = readSavedPosition()
-  return savedPosition && isPositionVisible(savedPosition) ? savedPosition : getDefaultPosition()
+  return savedPosition && isPositionVisible(savedPosition)
+    ? constrainPositionToDisplay(savedPosition)
+    : getDefaultPosition()
 }
 
 function saveWindowPosition(): void {
@@ -585,23 +619,32 @@ function schedulePositionSave(): void {
   savePositionTimer = setTimeout(saveWindowPosition, 150)
 }
 
-function ensureWindowIsVisible(): void {
+function ensureWindowIsVisible(moveToPrimaryDisplay = false): void {
   if (!catWindow || catWindow.isDestroyed()) return
   const [x, y] = catWindow.getPosition()
-  if (!isPositionVisible({ x, y })) {
-    const fallback = getDefaultPosition()
-    catWindow.setPosition(fallback.x, fallback.y)
-    precisePosition = fallback
-  }
+  const currentPosition = { x, y }
+  const safePosition = moveToPrimaryDisplay
+    ? getDefaultPosition()
+    : constrainPositionToDisplay(currentPosition)
+  if (safePosition.x === x && safePosition.y === y) return
+
+  setCatWindowPosition(safePosition)
+  schedulePositionSave()
+  console.info('Moved the desktop cat back into a visible work area.', {
+    from: currentPosition,
+    to: safePosition,
+    display: moveToPrimaryDisplay ? 'primary' : 'nearest',
+  })
 }
 
-function showCat(): void {
+function showCat(moveToPrimaryDisplay = false): void {
   if (!catWindow || catWindow.isDestroyed()) {
     createCatWindow()
     return
   }
-  ensureWindowIsVisible()
+  ensureWindowIsVisible(moveToPrimaryDisplay)
   catWindow.showInactive()
+  catWindow.moveTop()
 }
 
 function createCatWindow(): void {
@@ -766,15 +809,36 @@ function recoverMovementPosition(mode: CatMovementMode, reason: unknown): void {
   if (!catWindow || catWindow.isDestroyed()) return
   const bounds = catWindow.getBounds()
   const fallback = getDefaultPosition()
-  precisePosition = Number.isFinite(bounds.x) && Number.isFinite(bounds.y)
+  const currentPosition = Number.isFinite(bounds.x) && Number.isFinite(bounds.y)
     ? { x: bounds.x, y: bounds.y }
     : fallback
+  const safePosition = constrainPositionToDisplay(currentPosition)
+
   console.error('Recovered from an invalid desktop cat movement position.', {
     reason,
-    precisePosition,
+    currentPosition,
+    safePosition,
     velocity,
   })
-  chooseVelocity(mode)
+
+  try {
+    setCatWindowPosition(safePosition)
+    schedulePositionSave()
+    chooseVelocity(mode)
+  } catch (recoveryError) {
+    if (movementTimer) clearInterval(movementTimer)
+    movementTimer = undefined
+    velocity = { x: 0, y: 0 }
+    try {
+      setCatWindowPosition(fallback)
+      schedulePositionSave()
+    } catch (fallbackError) {
+      console.error('Failed to restore the desktop cat to the primary display.', {
+        recoveryError,
+        fallbackError,
+      })
+    }
+  }
 }
 
 function moveCatOneFrame(mode: CatMovementMode): void {
@@ -805,8 +869,8 @@ function moveCatOneFrame(mode: CatMovementMode): void {
     velocity.y *= -1
   }
 
-  const targetX = Math.round(nextX)
-  const targetY = Math.round(nextY)
+  const targetX = normalizeScreenCoordinate(nextX)
+  const targetY = normalizeScreenCoordinate(nextY)
   precisePosition = { x: nextX, y: nextY }
 
   try {
@@ -897,7 +961,7 @@ function createTray(): void {
   tray = new Tray(createTrayIcon())
   tray.setToolTip('猫的角落')
   tray.setContextMenu(Menu.buildFromTemplate([
-    { label: '显示小猫', click: showCat },
+    { label: '显示小猫（主屏幕）', click: () => showCat(true) },
     { label: '隐藏小猫', click: () => catWindow?.hide() },
     { type: 'separator' },
     {
@@ -908,7 +972,7 @@ function createTray(): void {
       },
     },
   ]))
-  tray.on('click', showCat)
+  tray.on('click', () => showCat(true))
 }
 
 function registerIpcHandlers(): void {
@@ -926,11 +990,11 @@ function registerIpcHandlers(): void {
     ) return
 
     const [currentX, currentY] = catWindow.getPosition()
-    precisePosition = {
+    const nextPosition = constrainPositionToDisplay({
       x: currentX + Math.round(deltaX),
       y: currentY + Math.round(deltaY),
-    }
-    catWindow.setPosition(precisePosition.x, precisePosition.y)
+    })
+    setCatWindowPosition(nextPosition)
     schedulePositionSave()
   })
 
@@ -995,7 +1059,7 @@ const hasSingleInstanceLock = app.requestSingleInstanceLock()
 if (!hasSingleInstanceLock) {
   app.quit()
 } else {
-  app.on('second-instance', showCat)
+  app.on('second-instance', () => showCat(true))
   app.whenReady().then(() => {
     app.setAppUserModelId('com.desktopcat.corner')
     registerIpcHandlers()
@@ -1009,8 +1073,8 @@ if (!hasSingleInstanceLock) {
     startReminderSync()
     powerMonitor.on('resume', reconnectProfileEvents)
     powerMonitor.on('resume', resumeReminderSync)
-    screen.on('display-removed', ensureWindowIsVisible)
-    screen.on('display-metrics-changed', ensureWindowIsVisible)
+    screen.on('display-removed', () => ensureWindowIsVisible())
+    screen.on('display-metrics-changed', () => ensureWindowIsVisible())
   })
 }
 
