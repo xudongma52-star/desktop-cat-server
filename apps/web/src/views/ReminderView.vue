@@ -21,6 +21,8 @@ const actionId = ref<number | null>(null)
 const error = ref('')
 const formError = ref('')
 let loadGeneration = 0
+let reminderEventSource: EventSource | undefined
+let eventRefreshTimer: number | undefined
 
 const heading = computed(() => scope.value === 'TODAY' ? '今天要记得的事' : '还没有完成的事')
 const emptyText = computed(() => scope.value === 'TODAY'
@@ -163,9 +165,30 @@ function changeScope(nextScope: ReminderScope): void {
   void loadReminders()
 }
 
-onMounted(() => void loadReminders())
+function scheduleEventRefresh(): void {
+  if (eventRefreshTimer !== undefined) return
+  // 合并短时间内连续到达的变更，避免一次操作链触发多次重复查询。
+  eventRefreshTimer = window.setTimeout(() => {
+    eventRefreshTimer = undefined
+    void loadReminders()
+  }, 120)
+}
+
+function connectReminderEvents(): void {
+  reminderEventSource = new EventSource('/api/events')
+  reminderEventSource.addEventListener('connection.ready', scheduleEventRefresh)
+  reminderEventSource.addEventListener('reminder.changed', scheduleEventRefresh)
+}
+
+onMounted(() => {
+  void loadReminders()
+  connectReminderEvents()
+})
 onBeforeUnmount(() => {
   loadGeneration += 1
+  reminderEventSource?.close()
+  reminderEventSource = undefined
+  if (eventRefreshTimer !== undefined) window.clearTimeout(eventRefreshTimer)
 })
 </script>
 

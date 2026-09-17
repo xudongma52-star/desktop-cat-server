@@ -39,7 +39,7 @@ const CAT_PROFILE_API_URL = `${ASSISTANT_API_URL}/api/cat/profile`
 const ASSISTANT_EVENTS_API_URL = `${ASSISTANT_API_URL}/api/events`
 const EMOTIONS_API_URL = `${ASSISTANT_API_URL}/api/emotions`
 const REMINDERS_API_URL = `${ASSISTANT_API_URL}/api/reminders`
-const REMINDER_SYNC_INTERVAL_MS = 30_000
+const REMINDER_SYNC_INTERVAL_MS = 5 * 60_000
 const REMINDER_DUE_CHECK_INTERVAL_MS = 5_000
 const DEFAULT_CAT_PROFILE: CatProfile = {
   profileId: 1,
@@ -54,6 +54,7 @@ type ActivityPanelSide = 'left' | 'right'
 type CompanionState = { firstMetDate: string }
 type ServerEvent = { event: string; data: string }
 type CatProfileUpdatedEvent = { profileId: number; version: number }
+type ReminderChangedEvent = { reminderId: number; version: number; action: string }
 type ReminderCache = { reminders: Reminder[]; notifiedTokens: string[] }
 
 let catWindow: BrowserWindow | null = null
@@ -347,13 +348,27 @@ function isCatProfileUpdatedEvent(value: unknown): value is CatProfileUpdatedEve
     && Number.isSafeInteger(candidate.version) && (candidate.version ?? -1) >= 0
 }
 
+function isReminderChangedEvent(value: unknown): value is ReminderChangedEvent {
+  if (!value || typeof value !== 'object') return false
+  const candidate = value as Partial<ReminderChangedEvent>
+  return Number.isSafeInteger(candidate.reminderId) && (candidate.reminderId ?? 0) > 0
+    && Number.isSafeInteger(candidate.version) && (candidate.version ?? -1) >= 0
+    && typeof candidate.action === 'string' && candidate.action.length > 0
+}
+
 async function handleServerEvent(serverEvent: ServerEvent): Promise<void> {
-  if (serverEvent.event !== 'cat-profile.updated') return
   try {
     const candidate: unknown = JSON.parse(serverEvent.data)
-    if (!isCatProfileUpdatedEvent(candidate)) throw new Error('Profile update event is invalid.')
-    if (candidate.profileId === catProfile.profileId && candidate.version > catProfile.version) {
-      await syncCatProfile()
+    if (serverEvent.event === 'cat-profile.updated') {
+      if (!isCatProfileUpdatedEvent(candidate)) throw new Error('Profile update event is invalid.')
+      if (candidate.profileId === catProfile.profileId && candidate.version > catProfile.version) {
+        await syncCatProfile()
+      }
+      return
+    }
+    if (serverEvent.event === 'reminder.changed') {
+      if (!isReminderChangedEvent(candidate)) throw new Error('Reminder update event is invalid.')
+      await syncReminders()
     }
   } catch (error) {
     console.warn('Ignored an invalid assistant server event.', error)
@@ -410,6 +425,7 @@ async function connectProfileEvents(): Promise<void> {
 
     // Reconcile once after every connection so events missed while offline cannot leave stale state.
     await syncCatProfile()
+    await syncReminders()
     await consumeServerEvents(response)
     if (!abortController.signal.aborted) throw new Error('Assistant event stream closed unexpectedly.')
   } catch (error) {

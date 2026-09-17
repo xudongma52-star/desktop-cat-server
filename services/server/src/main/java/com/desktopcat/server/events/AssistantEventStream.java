@@ -9,6 +9,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.event.TransactionPhase;
+import org.springframework.transaction.event.TransactionalEventListener;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 /**
@@ -55,6 +57,15 @@ public class AssistantEventStream {
                 .id(profileId + "-" + version)
                 .name("cat-profile.updated")
                 .data(new CatProfileUpdatedEvent(profileId, version)));
+    }
+
+    /** 事务提交成功后再通知客户端，避免客户端读取到尚未提交的提醒状态。 */
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void publishReminderChanged(ReminderChangedEvent event) {
+        publish(SseEmitter.event()
+                .id("reminder-" + event.reminderId() + "-" + event.version() + "-" + event.action())
+                .name("reminder.changed")
+                .data(event));
     }
 
     //定时发送心跳

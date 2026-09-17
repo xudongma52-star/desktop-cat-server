@@ -1,5 +1,6 @@
 package com.desktopcat.server.reminder.service.impl;
 
+import com.desktopcat.server.events.ReminderChangedEvent;
 import com.desktopcat.server.reminder.dao.ReminderDO;
 import com.desktopcat.server.reminder.dao.ReminderDao;
 import com.desktopcat.server.reminder.dto.ReminderCompleteDto;
@@ -15,6 +16,7 @@ import java.util.Locale;
 import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.annotation.Profile;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -32,9 +34,11 @@ public class ReminderServiceImpl implements ReminderService {
     private static final String PENDING = "PENDING";
 
     private final ReminderDao reminderDao;
+    private final ApplicationEventPublisher eventPublisher;
 
-    public ReminderServiceImpl(ReminderDao reminderDao) {
+    public ReminderServiceImpl(ReminderDao reminderDao, ApplicationEventPublisher eventPublisher) {
         this.reminderDao = reminderDao;
+        this.eventPublisher = eventPublisher;
     }
 
     @Override
@@ -60,6 +64,7 @@ public class ReminderServiceImpl implements ReminderService {
         log.info("event=reminder_created reminderId={} remindAt={} status={} contentLength={}",
                 created.getReminderId(), created.getRemindAt(), created.getStatus(),
                 codePointLength(created.getContent()));
+        publishChanged(created, "CREATED");
         return toDto(created);
     }
 
@@ -111,6 +116,7 @@ public class ReminderServiceImpl implements ReminderService {
                         + "contentLength={}",
                 updated.getReminderId(), updated.getRemindAt(), version, updated.getVersion(),
                 codePointLength(updated.getContent()));
+        publishChanged(updated, "UPDATED");
         return toDto(updated);
     }
 
@@ -133,6 +139,7 @@ public class ReminderServiceImpl implements ReminderService {
         ReminderDO completed = findActiveReminder(normalizedId);
         log.info("event=reminder_completed reminderId={} remindAt={} versionBefore={} versionAfter={}",
                 completed.getReminderId(), completed.getRemindAt(), version, completed.getVersion());
+        publishChanged(completed, "COMPLETED");
         return toDto(completed);
     }
 
@@ -148,6 +155,13 @@ public class ReminderServiceImpl implements ReminderService {
             resolveWriteFailure(normalizedId, normalizedVersion, false);
         }
         log.info("event=reminder_deleted reminderId={} version={}", normalizedId, normalizedVersion);
+        eventPublisher.publishEvent(new ReminderChangedEvent(
+                normalizedId, normalizedVersion, "DELETED"));
+    }
+
+    private void publishChanged(ReminderDO reminder, String action) {
+        eventPublisher.publishEvent(new ReminderChangedEvent(
+                reminder.getReminderId(), reminder.getVersion(), action));
     }
 
     private void resolveWriteFailure(long reminderId, int expectedVersion, boolean requirePending) {

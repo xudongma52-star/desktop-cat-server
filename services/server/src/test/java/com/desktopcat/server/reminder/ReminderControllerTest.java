@@ -26,12 +26,14 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 class ReminderControllerTest {
     private final ReminderDao reminderDao = mock(ReminderDao.class);
+    private final ApplicationEventPublisher eventPublisher = mock(ApplicationEventPublisher.class);
     private final AtomicReference<ReminderDO> stored = new AtomicReference<>();
     private MockMvc mvc;
 
@@ -91,7 +93,7 @@ class ReminderControllerTest {
             return 1;
         });
 
-        ReminderService service = new ReminderServiceImpl(reminderDao);
+        ReminderService service = new ReminderServiceImpl(reminderDao, eventPublisher);
         mvc = MockMvcBuilders.standaloneSetup(new ReminderController(service))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .addFilters(new RequestIdFilter())
