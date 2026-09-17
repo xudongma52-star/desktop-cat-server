@@ -1,40 +1,40 @@
-import mewFoodUrl from './assets/audio/cat-mew-food.wav'
-import mewPurrUrl from './assets/audio/cat-mew-purr.wav'
-import mewPurrSecondUrl from './assets/audio/cat-mew-purr-2.wav'
-import siameseMeowUrl from './assets/audio/cat-siamese-meow.wav'
-import softMewUrl from './assets/audio/cat-soft-mew.wav'
+import purrTwitOneUrl from './assets/audio/cat-purr-twit-1.mp3'
+import purrTwitTwoUrl from './assets/audio/cat-purr-twit-2.mp3'
+import purrTwitThreeUrl from './assets/audio/cat-purr-twit-3.mp3'
+import purrTwitFourUrl from './assets/audio/cat-purr-twit-4.mp3'
+import purrTwitFiveUrl from './assets/audio/cat-purr-twit-5.mp3'
+import purrTwitSixUrl from './assets/audio/cat-purr-twit-6.mp3'
 
 export type CatSoundCue = 'greeting' | 'touch' | 'reminder' | 'happy' | 'protest'
 
 type CatSoundVariant = {
   url: string
   volume: number
-  playbackRate: number
 }
 
 const SOUND_VARIANTS: Record<CatSoundCue, readonly CatSoundVariant[]> = {
   greeting: [
-    { url: siameseMeowUrl, volume: 0.44, playbackRate: 1.06 },
-    { url: softMewUrl, volume: 0.38, playbackRate: 1.08 },
-    { url: mewPurrUrl, volume: 0.4, playbackRate: 1.04 },
+    { url: purrTwitFourUrl, volume: 0.3 },
+    { url: purrTwitSixUrl, volume: 0.3 },
+    { url: purrTwitOneUrl, volume: 0.28 },
   ],
   touch: [
-    { url: mewPurrUrl, volume: 0.36, playbackRate: 1.08 },
-    { url: mewPurrSecondUrl, volume: 0.34, playbackRate: 1.1 },
-    { url: softMewUrl, volume: 0.36, playbackRate: 1.12 },
+    { url: purrTwitFourUrl, volume: 0.24 },
+    { url: purrTwitFiveUrl, volume: 0.24 },
+    { url: purrTwitSixUrl, volume: 0.24 },
   ],
   reminder: [
-    { url: mewFoodUrl, volume: 0.48, playbackRate: 1 },
-    { url: siameseMeowUrl, volume: 0.46, playbackRate: 0.98 },
+    { url: purrTwitOneUrl, volume: 0.34 },
+    { url: purrTwitTwoUrl, volume: 0.34 },
   ],
   happy: [
-    { url: softMewUrl, volume: 0.38, playbackRate: 1.12 },
-    { url: mewPurrUrl, volume: 0.4, playbackRate: 1.1 },
-    { url: mewPurrSecondUrl, volume: 0.36, playbackRate: 1.14 },
+    { url: purrTwitTwoUrl, volume: 0.28 },
+    { url: purrTwitThreeUrl, volume: 0.28 },
+    { url: purrTwitSixUrl, volume: 0.28 },
   ],
   protest: [
-    { url: mewFoodUrl, volume: 0.4, playbackRate: 0.92 },
-    { url: siameseMeowUrl, volume: 0.4, playbackRate: 0.9 },
+    { url: purrTwitOneUrl, volume: 0.26 },
+    { url: purrTwitFiveUrl, volume: 0.26 },
   ],
 }
 
@@ -77,8 +77,6 @@ export function playCatSound(cue: CatSoundCue): void {
   const variant = pickVariant(cue)
   const audio = new Audio(variant.url)
   audio.volume = variant.volume
-  audio.playbackRate = variant.playbackRate * (0.98 + Math.random() * 0.04)
-  audio.preservesPitch = false
   activeAudio = audio
   audio.addEventListener('ended', () => {
     if (activeAudio === audio) activeAudio = undefined

@@ -1,24 +1,20 @@
 # Third-party notices
 
-## Cat purr and meow recordings
+## Cat purr and twit greetings
 
-- Assets: `cat-mew-food.wav`, `cat-mew-purr.wav`, `cat-mew-purr-2.wav`, `cat-soft-mew.wav`
-- Source work: “Cat Purr & Meow” by Kerzoven
-- Source: https://opengameart.org/content/cat-purr-meow
+- Assets: `cat-purr-twit-1.mp3` through `cat-purr-twit-6.mp3`
+- Source works: “Cat_Twit1.wav”, “Cat Happy Purr/Twitter2.wav”, “Cat Happy Purr/Twit3.wav”, “Cat Purr/Twit4.wav”, “Cat Purr/Twit5.wav”, and “Cat Purr/Twit6.wav” by steffcaffrey
+- Sources:
+  - https://freesound.org/people/steffcaffrey/sounds/262306/
+  - https://freesound.org/people/steffcaffrey/sounds/262307/
+  - https://freesound.org/people/steffcaffrey/sounds/262308/
+  - https://freesound.org/people/steffcaffrey/sounds/262309/
+  - https://freesound.org/people/steffcaffrey/sounds/262310/
+  - https://freesound.org/people/steffcaffrey/sounds/262311/
 - License: Creative Commons CC0 1.0 Universal
 - License text: https://creativecommons.org/publicdomain/zero/1.0/
-- Project changes: DC offset removal, peak normalization, and short fades
+- Project copy: Freesound's high-quality MP3 previews of the original 16-bit, 44.1 kHz recordings
 
-The source page states that these are cat recordings made by the author. Background noise may be present in the originals because the cat moved during recording.
-
-## Siamese cat meow
-
-- Asset: `cat-siamese-meow.wav`
-- Source work: “Meow of a Siamese cat - freemaster2.wav” by freemaster2
-- Original source: https://commons.wikimedia.org/wiki/File:Meow_of_a_Siamese_cat_-_freemaster2.wav
-- Processed source: https://github.com/CureJe/sedentary-reminder/blob/main/assets/audio/cat.wav
-- License: Creative Commons CC0 1.0 Universal
-- License text: https://creativecommons.org/publicdomain/zero/1.0/
-- Upstream changes: trimmed to one meow, DC offset removed, converted to mono 22,050 Hz PCM, normalized, and given short fades
+The source pages describe all six clips as short, happy cat purr/twit greetings recorded from the same male cat with a Zoom H4. They are used without pitch shifting so the cat's natural voice is preserved.
 
 CC0 permits copying, modification, and distribution, including commercial use, without requiring attribution. These notices are retained to keep the recordings' origins auditable.
