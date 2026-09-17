@@ -207,6 +207,9 @@ public class ReminderServiceImpl implements ReminderService {
         if (remindAt == null) {
             throw badRequest("Reminder time is required.");
         }
+        if (remindAt.isBefore(Instant.now())) {
+            throw badRequest("Reminder time must not be in the past.");
+        }
         return remindAt;
     }
 

@@ -435,7 +435,7 @@ onBeforeUnmount(() => {
           data-interactive
           :disabled="isCompletingReminder"
           @click="completeDueReminder"
-        >{{ isCompletingReminder ? '记录中…' : '✓ 我做完了' }}</button>
+        >{{ isCompletingReminder ? '正在完成…' : '✓ 完成这件事' }}</button>
         <small v-else>{{ currentDefinition.icon }} {{ currentDefinition.label }}</small>
       </div>
 
@@ -575,20 +575,24 @@ onBeforeUnmount(() => {
 
 .reminder-complete {
   justify-self: center;
-  margin-top: 4px;
-  padding: 3px 7px;
-  border: 1px solid rgb(122 149 112 / 55%);
-  border-radius: 8px;
-  color: #587052;
-  background: #edf3e8;
-  font-size: 8px;
+  width: 100%;
+  min-height: 24px;
+  margin-top: 6px;
+  padding: 5px 9px;
+  border: 1px solid #536d50;
+  border-radius: 9px;
+  color: #fff;
+  background: #657d5d;
+  box-shadow: 0 2px 6px rgb(64 86 61 / 22%);
+  font-size: 9px;
+  font-weight: 650;
   cursor: pointer;
   pointer-events: auto;
   -webkit-app-region: no-drag;
   app-region: no-drag;
 }
 
-.reminder-complete:hover { color: #fff; background: #657d5d; }
+.reminder-complete:hover { background: #435e42; }
 .reminder-complete:disabled { cursor: wait; opacity: .6; }
 
 .speech:active { cursor: grabbing; }

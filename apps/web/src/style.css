@@ -192,6 +192,12 @@ input:focus, textarea:focus, select:focus { border-color: #81927b; outline: 3px 
 .reminder-form-error { grid-column: 2; margin: -13px 0 0; }
 .reminder-list-panel { margin-top: 22px; }
 .reminder-list-top { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin-bottom: 23px; }
+.reminder-list-identity { display: flex; align-items: center; gap: 17px; }
+.reminder-cat-doodle { width: 90px; height: 76px; padding: 6px; overflow: visible; border-radius: 22px; color: #3f5b4e; background: #edf0e7; }
+.reminder-cat-doodle path { fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.reminder-cat-doodle .cat-head { fill: #f8f6ef; }
+.reminder-cat-doodle .cat-body { fill: #e2e8dc; }
+.reminder-cat-doodle .cat-blush { fill: #d9a99c; opacity: .72; }
 .reminder-tabs { display: flex; gap: 4px; padding: 4px; border-radius: 12px; background: #eff1ea; }
 .reminder-tabs button { padding: 8px 12px; color: #6f7d72; background: transparent; }
 .reminder-tabs button:hover, .reminder-tabs button.active { color: #fff; background: var(--green); }
@@ -289,6 +295,7 @@ input:focus, textarea:focus, select:focus { border-color: #81927b; outline: 3px 
   .reminder-form-error { grid-column: auto; margin-top: 0; }
   .reminder-list-panel { padding: 24px 18px; }
   .reminder-list-top { align-items: flex-start; flex-direction: column; }
+  .reminder-cat-doodle { width: 74px; height: 64px; border-radius: 18px; }
   .reminder-list li { grid-template-columns: auto minmax(0, 1fr) auto; }
   .reminder-status { display: none; }
   .reminder-actions { grid-column: 2 / -1; }

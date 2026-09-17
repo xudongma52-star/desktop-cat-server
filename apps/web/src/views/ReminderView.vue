@@ -91,12 +91,17 @@ async function saveReminder(): Promise<void> {
     formError.value = '请选择提醒时间。'
     return
   }
+  const selectedTime = new Date(remindAt.value)
+  if (Number.isNaN(selectedTime.getTime()) || selectedTime.getTime() < Date.now()) {
+    formError.value = '提醒时间不能早于当前时间。'
+    return
+  }
 
   saving.value = true
   try {
     const draft = {
       content: normalizedContent,
-      remindAt: new Date(remindAt.value).toISOString(),
+      remindAt: selectedTime.toISOString(),
     }
     if (editing.value) {
       await updateReminder(editing.value, draft)
@@ -110,6 +115,8 @@ async function saveReminder(): Promise<void> {
       resetForm()
       formError.value = '这条提醒刚刚发生了变化，列表已刷新，请重新确认。'
       await loadReminders()
+    } else if (caught instanceof ApiError && caught.code === 'REMINDER_TIME_IN_PAST') {
+      formError.value = '提醒时间不能早于当前时间。'
     } else {
       formError.value = describeApiError(caught, '提醒没有保存成功，请稍后再试。')
     }
@@ -197,9 +204,22 @@ onBeforeUnmount(() => {
 
     <section class="reminder-list-panel" aria-labelledby="reminder-list-title">
       <div class="reminder-list-top">
-        <div>
-          <p class="eyebrow">MY REMINDERS</p>
-          <h2 id="reminder-list-title">{{ heading }}</h2>
+        <div class="reminder-list-identity">
+          <svg class="reminder-cat-doodle" viewBox="0 0 120 100" aria-hidden="true">
+            <path class="cat-tail" d="M37 82C19 91 10 75 18 63C23 55 32 58 33 66" />
+            <path class="cat-body" d="M42 64C33 71 32 84 35 92H85C88 82 85 70 77 64" />
+            <path class="cat-head" d="M31 42C28 30 31 19 39 13L50 25C56 22 64 22 70 25L81 13C89 20 92 31 89 42C94 57 84 69 60 71C36 69 26 57 31 42Z" />
+            <path d="M44 45L50 47M76 45L70 47" />
+            <path d="M57 53L60 55L63 53M60 55V59M60 59C56 63 52 61 51 59M60 59C64 63 68 61 69 59" />
+            <path d="M43 54L25 51M43 59L23 62M77 54L95 51M77 59L97 62" />
+            <path d="M47 92V78M73 92V78" />
+            <circle class="cat-blush" cx="42" cy="57" r="3" />
+            <circle class="cat-blush" cx="78" cy="57" r="3" />
+          </svg>
+          <div>
+            <p class="eyebrow">MY REMINDERS</p>
+            <h2 id="reminder-list-title">{{ heading }}</h2>
+          </div>
         </div>
         <div class="reminder-tabs" role="group" aria-label="提醒范围">
           <button type="button" :class="{ active: scope === 'TODAY' }" @click="changeScope('TODAY')">今天</button>

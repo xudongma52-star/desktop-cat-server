@@ -103,7 +103,7 @@ class ReminderControllerTest {
         mvc.perform(post("/api/reminders")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"content":"  记得喝水  ","remindAt":"2026-09-17T08:30:00Z"}
+                                {"content":"  记得喝水  ","remindAt":"2099-09-17T08:30:00Z"}
                                 """))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.reminderId").value(1))
@@ -118,7 +118,7 @@ class ReminderControllerTest {
         mvc.perform(put("/api/reminders/1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"content":"起来活动一下","remindAt":"2026-09-17T09:00:00Z","version":0}
+                                {"content":"起来活动一下","remindAt":"2099-09-17T09:00:00Z","version":0}
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content").value("起来活动一下"))
@@ -142,7 +142,7 @@ class ReminderControllerTest {
         mvc.perform(post("/api/reminders")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"content":"   ","remindAt":"2026-09-17T08:30:00Z"}
+                                {"content":"   ","remindAt":"2099-09-17T08:30:00Z"}
                                 """))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("REMINDER_CONTENT_REQUIRED"));
@@ -150,14 +150,30 @@ class ReminderControllerTest {
         mvc.perform(post("/api/reminders")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"content":"喝水","remindAt":"2026-09-17T08:30:00Z"}
+                                {"content":"已经过去的提醒","remindAt":"2020-01-01T00:00:00Z"}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("REMINDER_TIME_IN_PAST"));
+
+        mvc.perform(post("/api/reminders")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"content":"喝水","remindAt":"2099-09-17T08:30:00Z"}
                                 """))
                 .andExpect(status().isCreated());
 
         mvc.perform(put("/api/reminders/1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"content":"喝水","remindAt":"2026-09-17T09:00:00Z","version":9}
+                                {"content":"过去的修改时间","remindAt":"2020-01-01T00:00:00Z","version":0}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("REMINDER_TIME_IN_PAST"));
+
+        mvc.perform(put("/api/reminders/1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"content":"喝水","remindAt":"2099-09-17T09:00:00Z","version":9}
                                 """))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("REMINDER_VERSION_CONFLICT"));

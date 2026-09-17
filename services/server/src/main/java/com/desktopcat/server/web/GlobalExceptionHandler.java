@@ -71,6 +71,7 @@ public class GlobalExceptionHandler {
             Map.entry("Reminder content is required.", "REMINDER_CONTENT_REQUIRED"),
             Map.entry("Reminder content must not exceed 200 characters.", "REMINDER_CONTENT_TOO_LONG"),
             Map.entry("Reminder time is required.", "REMINDER_TIME_REQUIRED"),
+            Map.entry("Reminder time must not be in the past.", "REMINDER_TIME_IN_PAST"),
             Map.entry("Reminder scope must be TODAY or PENDING.", "REMINDER_SCOPE_INVALID"),
             Map.entry("Reminder version is required.", "REMINDER_VERSION_REQUIRED"),
             Map.entry("Reminder version must not be negative.", "REMINDER_VERSION_INVALID"),
