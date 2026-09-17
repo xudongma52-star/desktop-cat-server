@@ -1,5 +1,6 @@
 package com.desktopcat.server.emotion;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
@@ -19,9 +20,11 @@ import com.desktopcat.server.web.GlobalExceptionHandler;
 import com.desktopcat.server.web.RequestIdFilter;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -46,17 +49,26 @@ class EmotionControllerTest {
     }
 
     @Test
-    void createsAnEmotionFromContentOnly() throws Exception {
+    void createsAnEmotionForTheCurrentShanghaiDateAndIgnoresClientDates() throws Exception {
         mvc.perform(post("/api/emotions")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"content":"  今天事情都挤在一起，真的很烦。  "}
+                                {
+                                  "content":"  今天事情都挤在一起，真的很烦。  ",
+                                  "recordDate":"2099-01-01"
+                                }
                                 """))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.emotionId").value(1))
                 .andExpect(jsonPath("$.content").value("今天事情都挤在一起，真的很烦。"))
                 .andExpect(jsonPath("$.recordDate").isNotEmpty())
                 .andExpect(jsonPath("$.createdAt").isNotEmpty());
+
+        ArgumentCaptor<EmotionDO> emotionCaptor = ArgumentCaptor.forClass(EmotionDO.class);
+        verify(emotionDao).insert(emotionCaptor.capture());
+        assertEquals(
+                LocalDate.now(ZoneId.of("Asia/Shanghai")),
+                emotionCaptor.getValue().getRecordDate());
     }
 
     @Test

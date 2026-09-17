@@ -184,6 +184,13 @@ input:focus, textarea:focus, select:focus { border-color: #81927b; outline: 3px 
 .record-detail { padding: 44px 48px 34px; }
 .emotion-heading { align-items: center; }
 .emotion-heading > time { padding: 8px 12px; border-radius: 999px; color: #71806f; background: #e9ede3; font-size: 12px; white-space: nowrap; }
+.emotion-date-nav { display: flex; align-items: end; gap: 10px; margin-bottom: 10px; }
+.emotion-date-nav label { display: grid; gap: 6px; color: #7b857a; font-size: 11px; }
+.emotion-date-nav input { min-height: 39px; padding: 8px 11px; border: 1px solid #d7dcd1; border-radius: 10px; color: #44534a; background: var(--paper); font: inherit; color-scheme: light; }
+.emotion-date-nav input:focus-visible { outline: 3px solid #bd9d61; outline-offset: 2px; }
+.emotion-date-nav .text-button { margin-left: auto; padding-inline: 8px; color: #607365; background: transparent; }
+.emotion-date-nav .text-button:hover { background: #e9ede3; }
+.emotion-date-note { margin: 0 0 20px; color: #8a9388; font-size: 11px; line-height: 1.7; }
 .emotion-panel { padding: 30px 34px; border: 1px solid #e1e3d9; border-radius: 22px; background: var(--paper); }
 .emotion-panel-title { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 24px; }
 .emotion-panel-title h2 { margin: 0; }
@@ -246,6 +253,9 @@ input:focus, textarea:focus, select:focus { border-color: #81927b; outline: 3px 
   .form-grid.two-columns, .preference-fields { grid-template-columns: 1fr; }
   .record-detail { padding: 30px 22px 24px; }
   .emotion-panel { padding: 24px 20px; }
+  .emotion-date-nav { align-items: stretch; flex-wrap: wrap; }
+  .emotion-date-nav label { flex: 1 1 150px; }
+  .emotion-date-nav .text-button { width: 100%; margin-left: 0; }
   .emotion-timeline li { grid-template-columns: 46px 1fr; gap: 13px; }
   .emotion-timeline li:not(:last-child)::before { left: 52px; }
   .emotion-timeline p::before { left: -12px; }
