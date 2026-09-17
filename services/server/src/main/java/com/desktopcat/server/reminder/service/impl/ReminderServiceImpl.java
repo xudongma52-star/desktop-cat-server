@@ -29,11 +29,14 @@ import org.springframework.web.server.ResponseStatusException;
 public class ReminderServiceImpl implements ReminderService {
     private static final Logger log = LoggerFactory.getLogger(ReminderServiceImpl.class);
     private static final ZoneId USER_ZONE = ZoneId.of("Asia/Shanghai");
+    //定义了一个类级别的常量集合，用来保存系统允许的提醒查询范围。
     private static final Set<String> SCOPES = Set.of("TODAY", "PENDING");
     private static final int MAX_CONTENT_LENGTH = 200;
+    //定义了一个字符串常量，用来统一表示提醒的“未完成”状态。
     private static final String PENDING = "PENDING";
 
     private final ReminderDao reminderDao;
+    //一个由 Spring 自动注入、只在当前应用内部使用的事件发布器。
     private final ApplicationEventPublisher eventPublisher;
 
     public ReminderServiceImpl(ReminderDao reminderDao, ApplicationEventPublisher eventPublisher) {
