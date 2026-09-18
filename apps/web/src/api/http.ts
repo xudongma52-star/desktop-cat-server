@@ -23,10 +23,30 @@ export class ApiError extends Error {
   }
 }
 
+function readCookie(name: string): string | null {
+  const prefix = `${encodeURIComponent(name)}=`
+  const cookie = document.cookie
+    .split(';')
+    .map((item) => item.trim())
+    .find((item) => item.startsWith(prefix))
+  if (!cookie) return null
+
+  try {
+    return decodeURIComponent(cookie.slice(prefix.length))
+  } catch {
+    return cookie.slice(prefix.length)
+  }
+}
+
 export async function apiRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers)
   if (init.body && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json')
+  }
+  const method = (init.method ?? 'GET').toUpperCase()
+  if (!['GET', 'HEAD', 'OPTIONS'].includes(method) && !headers.has('X-XSRF-TOKEN')) {
+    const csrfToken = readCookie('XSRF-TOKEN')
+    if (csrfToken) headers.set('X-XSRF-TOKEN', csrfToken)
   }
 
   let response: Response
@@ -34,6 +54,7 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
     response = await fetch(path, {
       ...init,
       headers,
+      credentials: 'include',
       signal: init.signal ?? AbortSignal.timeout(8000),
     })
   } catch (cause) {

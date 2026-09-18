@@ -24,6 +24,15 @@ public class GlobalExceptionHandler {
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
     private static final Map<String, String> ERROR_CODES = Map.ofEntries(
             Map.entry("Request body is required.", "REQUEST_BODY_REQUIRED"),
+            Map.entry("Username is required.", "USERNAME_REQUIRED"),
+            Map.entry("Username must contain at least 3 characters.", "USERNAME_TOO_SHORT"),
+            Map.entry("Username must not exceed 32 characters.", "USERNAME_TOO_LONG"),
+            Map.entry("Username already exists.", "USERNAME_ALREADY_EXISTS"),
+            Map.entry("Password is required.", "PASSWORD_REQUIRED"),
+            Map.entry("Password must contain at least 6 characters.", "PASSWORD_TOO_SHORT"),
+            Map.entry("Password must not exceed 72 UTF-8 bytes.", "PASSWORD_TOO_LONG"),
+            Map.entry("User could not be created.", "USER_CREATE_FAILED"),
+            Map.entry("Invalid username or password.", "INVALID_CREDENTIALS"),
             Map.entry("Profile id is required.", "PROFILE_ID_REQUIRED"),
             Map.entry("Profile id must be positive.", "PROFILE_ID_INVALID"),
             Map.entry("Cat name is required.", "CAT_NAME_REQUIRED"),
