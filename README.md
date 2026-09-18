@@ -2,13 +2,15 @@
 
 [![CI](https://github.com/xudongma52-star/desktop-cat-server/actions/workflows/ci.yml/badge.svg)](https://github.com/xudongma52-star/desktop-cat-server/actions/workflows/ci.yml)
 
-Vue 3 + Electron + Spring Boot 3 + JDK 21，使用原生 MyBatis。当前已实现个人文章网站、年度写作足迹、文章温馨回忆轮播、每日情绪站、待办提醒，以及一个可独立运行的 Windows 桌面猫。
+Vue 3 + Electron + Spring Boot 3 + JDK 21，使用原生 MyBatis。当前已实现带登录注册的个人文章网站、年度写作足迹、文章温馨回忆轮播、每日情绪站、待办提醒，以及一个可独立运行的 Windows 桌面猫。
 
 ## 当前范围
 
 - 已建立 Vue、TypeScript、Vite、Router 和 Pinia 前端，并完成首页、文章列表、创建、详情、编辑和删除页面。
 - 已建立 Spring Boot 3.5.16 后端，加入 Validation、Actuator、MyBatis Starter 3.0.5、Flyway 和 PostgreSQL 驱动。
-- 默认连接本机 PostgreSQL；应用启动时由 Flyway 依次执行 V1、V2、V3、V4 迁移。需要脱离数据库开发时可显式启用 `local` 配置。
+- 默认连接本机 PostgreSQL；应用启动时由 Flyway 依次执行 V1–V5 迁移。需要脱离数据库开发时可显式启用 `local` 配置。
+- 已完成用户名注册、登录、退出和登录状态恢复。密码使用 BCrypt 哈希保存，服务端通过 `JSESSIONID` 维持会话，写请求使用 CSRF Cookie 与请求头校验；除认证入口、运行状态和健康检查外，`/api/**` 均要求登录。
+- 网页提供 `/login` 和 `/register` 页面，Pinia 保存当前用户状态，路由守卫会把未登录访问重定向到登录页，并在登录后返回原目标页面。
 - 已建立 Electron 桌面端：透明无边框窗口、置顶显示、透明区域鼠标穿透、拖动、真实猫叫、活动状态、自由移动、主动陪伴对话、托盘显隐与退出、窗口位置记忆和 Windows 安装包。
 - 当前 Q 版黑猫根据自己的猫照片生成，保留纯黑毛、圆脸、厚爪与琥珀眼；多组透明 PNG 精灵图配合 CSS 表现发呆、睡觉、舔毛、玩耍、吃冻干、散步和奔跑七种活动。
 - 已完成 `cat_profile` 资料表，可在网页修改小猫名字，并由 Java 通过 SSE 通知 Electron 实时同步；桌面端保留离线缓存。
@@ -17,8 +19,8 @@ Vue 3 + Electron + Spring Boot 3 + JDK 21，使用原生 MyBatis。当前已实�
 - 已完成 `daily_emotion` 每日情绪表：可从桌面小猫的单一文本框快速记录一句话，并在网站按日期追溯当天和过去的内容。创建日期始终由 Java 按上海时区当天生成，不能补写过去或预写明天；情绪碎片与文章分开保存，不要求选择情绪类型，也不触发即时 AI 回复。
 - 已完成 `reminder` 待办提醒表和网站管理页：可创建、修改、完成和删除一次性提醒，并查看今天或全部未完成事项。提醒变更通过 SSE 实时同步到网页和桌面猫，每 5 分钟低频校准一次；桌面猫每 5 秒在本地检查到期时间，断网时继续使用缓存，到点会出现并喵一声，可直接标记完成。
 - 首页文章温馨回忆轮播会读取主动开启 `recall_enabled` 的记录，支持上一条、下一条、暂停和自动轮播；目前只包含文字文章。
-- 图片回忆轮播、重复提醒、RAG 实际检索、拖拽投喂冻干、登录和开机自启尚未实现；相关开关或接入位置只作为后续扩展边界。
-- 开发服务绑定本机地址，当前框架用于本地学习，正式发布前需补齐鉴权与部署配置。
+- 图片回忆轮播、重复提醒、RAG 实际检索、拖拽投喂冻干和开机自启尚未实现；相关开关或接入位置只作为后续扩展边界。
+- 开发服务绑定本机地址，当前框架用于本地学习；正式发布前仍需补齐 HTTPS、会话持久化及部署配置。
 
 ## 环境
 
@@ -49,9 +51,9 @@ cd D:\repository
 pnpm dev
 ```
 
-打开 [http://127.0.0.1:5173](http://127.0.0.1:5173)，应看到“前后端已连通”。启动任一服务的终端按 `Ctrl+C` 可停止该服务。
+打开 [http://127.0.0.1:5173](http://127.0.0.1:5173)，首次使用时在注册页创建用户名和密码；注册成功后会自动登录并进入首页。已有账号可直接登录。启动任一服务的终端按 `Ctrl+C` 可停止该服务。
 
-后端接口：[运行状态](http://127.0.0.1:8080/api/system/status)、[小猫资料](http://127.0.0.1:8080/api/cat/profile)、[文章列表](http://127.0.0.1:8080/api/records)、[写作足迹](http://127.0.0.1:8080/api/records/activity?startDate=2025-09-18&endDate=2026-09-17&recordType=DIARY)、[文章回忆](http://127.0.0.1:8080/api/records/recalls)、[今日情绪](http://127.0.0.1:8080/api/emotions)、[今日提醒](http://127.0.0.1:8080/api/reminders?scope=TODAY)、[SSE 事件流](http://127.0.0.1:8080/api/events)、[健康检查](http://127.0.0.1:8080/actuator/health)。请求字段、响应示例和错误码见 [接口文档](./接口文档.md)。
+无需登录即可访问：[认证状态](http://127.0.0.1:8080/api/auth/status)、[运行状态](http://127.0.0.1:8080/api/system/status)和[健康检查](http://127.0.0.1:8080/actuator/health)。小猫资料、文章、情绪、提醒和 SSE 等业务接口需要先建立登录会话。请求字段、响应示例和错误码见 [接口文档](./接口文档.md)。
 
 单独开发桌面猫：
 
@@ -77,6 +79,20 @@ pnpm dist:desktop
 
 ## 请求是怎么走的
 
+登录注册链路如下：
+
+```text
+LoginView.vue / RegisterView.vue
+  → Pinia auth store
+  → src/api/auth.ts
+  → AuthController
+  → Spring Security 会话与 CSRF 校验
+  → AuthApplicationService + AppUserDao
+  → PostgreSQL app_user
+```
+
+网页启动时先调用 `GET /api/auth/status` 恢复登录状态。注册成功会自动建立会话；后续请求携带 `JSESSIONID`，非安全方法同时从 `XSRF-TOKEN` Cookie 读取令牌并写入 `X-XSRF-TOKEN` 请求头。密码只以 BCrypt 哈希写入数据库，不保存或返回明文。
+
 ```text
 RecordEditorView.vue
   → src/api/records.ts 的 POST 或 PUT 请求
@@ -94,10 +110,14 @@ RecordEditorView.vue
 
 提醒的管理链路为 `ReminderView.vue` → `/api/reminders` → `ReminderController` → `ReminderService` 接口 → `ReminderServiceImpl` → `ReminderDao` + `ReminderDao.xml` → PostgreSQL。桌面端主进程读取 `scope=PENDING`，把未完成提醒缓存到用户目录并把到期事项发送给渲染进程；用户点击“我做完了”后由主进程调用完成接口。
 
-文章接口如下：
+主要接口如下：
 
 | 方法与路径 | 用途 |
 | --- | --- |
+| `GET /api/auth/status` | 查询当前登录状态，匿名用户也可访问 |
+| `POST /api/auth/register` | 注册账号并自动登录；用户名 3–32 个字符，密码至少 6 个字符且不超过 72 个 UTF-8 字节 |
+| `POST /api/auth/login` | 使用用户名和密码登录 |
+| `POST /api/auth/logout` | 退出登录并清理会话 Cookie |
 | `POST /api/records` | 创建文章 |
 | `GET /api/records?page=1&pageSize=12&recordType=` | 分页查询文章，可按类型筛选 |
 | `GET /api/records/activity?startDate=&endDate=&recordType=DIARY` | 按日期统计每天的日记篇数 |
@@ -117,10 +137,11 @@ RecordEditorView.vue
 
 ```text
 apps/web/                    Vue 前端
-  src/api/                   HTTP 请求
-  src/components/            文章温馨回忆轮播等组件
+  src/api/                   认证与业务 HTTP 请求、CSRF 请求头处理
+  src/components/            登录场景、文章温馨回忆轮播等组件
   src/router/                页面路由
-  src/views/                 首页、文章、当天内心及提醒管理页面
+  src/stores/                Pinia 登录状态
+  src/views/                 登录、注册、首页、文章、当天内心及提醒管理页面
 apps/desktop/                Electron 桌面猫
   src/main/                  窗口、托盘、位置保存和 IPC
   src/preload/               受限的渲染进程桥接 API
@@ -130,7 +151,8 @@ apps/desktop/                Electron 桌面猫
     src/assets/audio/        本地猫叫资源
   build/                     应用图标
 services/server/             Java 后端
-  src/main/java/             启动类及 cat、record、emotion、reminder 等业务模块
+  src/main/java/             启动类及 identity、cat、record、emotion、reminder 等业务模块
+    .../identity/            账号、会话认证、CSRF 与安全配置
     .../record/controller/   个人文章 HTTP 接口
     .../record/dto/          Controller 与 Service 共用的传输对象
     .../record/service/      Service 接口与 impl 实现
@@ -165,6 +187,8 @@ cd services\server
 
 2026-09-17 已验证：提醒管理网页生产构建、桌面端类型检查与生产构建通过；Maven Wrapper `verify` 共 15 项测试通过并完成 JAR 打包。PostgreSQL 16.13 已执行 Flyway V4，真实 HTTP 请求覆盖提醒创建、今天与未完成查询、修改、完成和逻辑删除，验证数据已清理。浏览器已检查提醒页的桌面布局、表单、筛选和空状态。
 
+2026-09-18 已验证：登录、注册、退出、登录状态恢复、会话保护及 CSRF 请求处理已接入网页和后端；网页生产构建通过，Maven Wrapper 测试共 20 项通过。Flyway V5 新增 `app_user` 用户表，认证相关测试覆盖注册成功、重复用户名、参数校验、登录成功、错误凭据、匿名状态和受保护接口。
+
 ## PostgreSQL 连接配置
 
 默认配置可直接连接当前本机数据库：
@@ -185,7 +209,7 @@ $env:DB_PASSWORD = '替换为本地数据库密码'
 .\mvnw.cmd spring-boot:run
 ```
 
-服务器部署时必须通过环境变量提供真实密码，不要把服务器密码提交到仓库。应用首次启动时，Flyway 会在目标数据库创建 `flyway_schema_history`、`cat_profile`、`personal_record`、`daily_emotion` 和 `reminder`；业务主键分别使用 `profile_id`、`record_id`、`emotion_id`、`reminder_id`，不使用裸 `id`。V1 创建小猫资料，V2 创建文章记录，V3 创建每日情绪及日期时间索引，V4 创建待办提醒及有效提醒索引。
+服务器部署时必须通过环境变量提供真实密码，不要把服务器密码提交到仓库。应用首次启动时，Flyway 会在目标数据库创建 `flyway_schema_history`、`cat_profile`、`personal_record`、`daily_emotion`、`reminder` 和 `app_user`；业务主键分别使用 `profile_id`、`record_id`、`emotion_id`、`reminder_id`、`user_id`，不使用裸 `id`。V1 创建小猫资料，V2 创建文章记录，V3 创建每日情绪及日期时间索引，V4 创建待办提醒及有效提醒索引，V5 创建用户表及唯一用户名约束。
 
 需要临时使用不连接数据库的内存模式时：
 
@@ -194,20 +218,24 @@ $env:SPRING_PROFILES_ACTIVE = 'local'
 .\mvnw.cmd spring-boot:run
 ```
 
+`local` 配置只用于脱离数据库检查基础应用，认证接口不会启用，因此不能配合完整网页流程使用。
+
 ## 常见问题
 
 - 后端启动失败：先检查 `java -version` 是 JDK 21，并查看终端首个错误。
 - 页面连接失败：检查后端是否启动、8080 是否被占用。默认只需要启动前后端两个进程。
+- 页面一直停留在登录页：确认后端使用默认 `postgres` 配置启动，数据库已执行 V5，并检查浏览器是否允许 `127.0.0.1` 的 Cookie。
+- 写请求返回 403：刷新页面重新获取 CSRF Cookie；开发时应始终通过 `http://127.0.0.1:5173` 访问网页，避免混用 `localhost` 和 `127.0.0.1` 导致 Cookie 会话不一致。
 - Flyway 报 `relation personal_record already exists`：说明该表曾在 Flyway 之外手工创建，但 V2 尚未登记。先备份并核对数据，再让表结构与迁移历史恢复一致；不要直接修改已经提交的 V2 文件。
 - 5173 已被占用：停止原有前端进程后重启，Vite 不自动切换端口，避免访问错项目。
 - 桌面猫消失：单击系统托盘的小猫图标，或在托盘菜单中选择“显示小猫（主屏幕）”，小猫会回到主屏幕右下角。
 - 听不到猫叫：检查 Windows 当前输出设备和应用音量。猫叫使用随应用分发的本地真实录音，不读取麦克风，也不在运行时访问网络；来源和许可证见 `apps/desktop/THIRD_PARTY_NOTICES.md`。
 - 首次依赖下载需要网络；依赖解析后的前端版本固定在 `pnpm-lock.yaml` 中。
 
-完整规划见 [技术栈与架构](./桌面猫个人助手-技术栈与架构.md)。
+完整规划见 [产品功能与技术蓝图](./猫的角落-产品功能与技术蓝图.md)。
 
 ## 参与贡献
 
-日常开发汇总到 `dev`，稳定版本保存在 `main`。欢迎通过 Fork 创建功能分支，并向 `dev` 提交 Pull Request；具体流程见 [CONTRIBUTING.md](./CONTRIBUTING.md)。
+欢迎通过 Fork 创建功能分支并提交 Pull Request。提交前请至少运行与改动相关的类型检查、构建和后端测试。
 
 本项目采用 [MIT License](./LICENSE)。
