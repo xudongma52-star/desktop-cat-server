@@ -134,6 +134,9 @@ onBeforeUnmount(() => {
           <filter id="lampGlow" x="-120%" y="-120%" width="340%" height="340%">
             <feGaussianBlur stdDeviation="18" />
           </filter>
+          <filter id="sunlightBlur" x="-35%" y="-20%" width="170%" height="150%">
+            <feGaussianBlur stdDeviation="22" />
+          </filter>
           <clipPath id="roomClip">
             <rect x="34" y="28" width="732" height="724" rx="82" />
           </clipPath>
@@ -169,6 +172,8 @@ onBeforeUnmount(() => {
             <path class="curtain-tie" d="M88 216c-10 10-12 25-4 39m231-39c10 10 12 25 4 39" />
             <path class="window-sill" d="M58 306h291" />
           </g>
+
+          <path class="room-sunbeam" d="M92 92h105l286 568H188z" filter="url(#sunlightBlur)" />
 
           <g id="room-shelf">
             <path class="shelf-board" d="M536 132h154l8 18H527z" />
@@ -378,6 +383,7 @@ onBeforeUnmount(() => {
   --hill-near: #667b6a;
   --curtain: #b27668;
   --light-wash: rgba(255, 224, 173, .08);
+  --sunbeam: rgba(255, 215, 146, .12);
   --lamp-alpha: .65;
   position: relative;
   z-index: 1;
@@ -387,25 +393,27 @@ onBeforeUnmount(() => {
 }
 
 .phase-morning {
-  --room-wall: #ded6bf;
-  --room-floor: #b28d69;
-  --window-sky: #a9d3c7;
-  --hill-far: #88a18c;
-  --hill-near: #617f6e;
-  --curtain: #b67d6c;
-  --light-wash: rgba(255, 245, 202, .035);
-  --lamp-alpha: .28;
+  --room-wall: #e6d8bd;
+  --room-floor: #ba8f68;
+  --window-sky: #f1c995;
+  --hill-far: #9aa687;
+  --hill-near: #6f8871;
+  --curtain: #bd7e69;
+  --light-wash: rgba(255, 227, 166, .11);
+  --sunbeam: rgba(255, 213, 132, .3);
+  --lamp-alpha: .08;
 }
 
 .phase-afternoon {
-  --room-wall: #ddd1b6;
-  --room-floor: #af8663;
-  --window-sky: #91c3bd;
-  --hill-far: #799784;
-  --hill-near: #557666;
-  --curtain: #ae7468;
-  --light-wash: rgba(255, 225, 163, .08);
-  --lamp-alpha: .25;
+  --room-wall: #dfe0c8;
+  --room-floor: #ae8462;
+  --window-sky: #75c7d2;
+  --hill-far: #72a28c;
+  --hill-near: #497663;
+  --curtain: #a96d63;
+  --light-wash: rgba(220, 245, 230, .035);
+  --sunbeam: rgba(255, 244, 195, .045);
+  --lamp-alpha: .04;
 }
 
 .phase-dusk {
@@ -416,6 +424,7 @@ onBeforeUnmount(() => {
   --hill-near: #54596b;
   --curtain: #8d5f66;
   --light-wash: rgba(110, 69, 86, .12);
+  --sunbeam: rgba(255, 183, 126, .08);
   --lamp-alpha: .78;
 }
 
@@ -427,6 +436,7 @@ onBeforeUnmount(() => {
   --hill-near: #314a4c;
   --curtain: #6f5864;
   --light-wash: rgba(31, 45, 55, .28);
+  --sunbeam: rgba(255, 215, 150, 0);
   --lamp-alpha: 1;
 }
 
@@ -445,8 +455,12 @@ onBeforeUnmount(() => {
 .window-shadow { fill: rgba(73, 52, 46, .15); transform: translateY(9px); }
 .window-frame { fill: #f0e7d0; stroke: #292522; stroke-width: 10; stroke-linejoin: round; }
 .window-sky { fill: var(--window-sky); transition: fill 1.2s ease; }
-.window-sun, .window-sun-glow { fill: #ffe59b; transition: opacity 1.2s ease, transform 1.2s ease; }
+.window-sun, .window-sun-glow { fill: #ffe59b; transform-box: fill-box; transform-origin: center; transition: fill 1.2s ease, opacity 1.2s ease, transform 1.2s ease; }
 .window-sun-glow { opacity: .62; }
+.phase-morning .window-sun, .phase-morning .window-sun-glow { fill: #ffd98a; transform: translate(-7px, 16px) scale(.92); }
+.phase-morning .window-sun-glow { opacity: .82; }
+.phase-afternoon .window-sun, .phase-afternoon .window-sun-glow { fill: #ffe89d; transform: translate(54px, -18px) scale(1.08); }
+.phase-afternoon .window-sun-glow { opacity: .5; }
 .window-moon { fill: #f6e8b6; opacity: 0; transition: opacity 1.2s ease, transform 1.2s ease; transform: translateY(22px); }
 .moon-cut { fill: var(--window-sky); transition: fill 1.2s ease; }
 .window-stars { fill: #fff1b7; opacity: 0; transition: opacity 1.2s ease; }
@@ -459,6 +473,9 @@ onBeforeUnmount(() => {
 .window-hill.far { fill: var(--hill-far); }
 .window-hill.near { fill: var(--hill-near); }
 .window-cross, .window-sill { fill: none; stroke: #eee4cd; stroke-width: 12; stroke-linecap: round; }
+.room-sunbeam { fill: var(--sunbeam); pointer-events: none; transform-box: fill-box; transform-origin: top left; transition: fill 1.2s ease, opacity 1.2s ease, transform 1.2s ease; }
+.phase-morning .room-sunbeam { transform: translate(-4px, 7px) rotate(-2deg); }
+.phase-afternoon .room-sunbeam { transform: translate(72px, -22px) rotate(7deg); }
 .curtain { fill: var(--curtain); stroke: #292522; stroke-width: 10; stroke-linejoin: round; transition: fill 1.2s ease; }
 .curtain-tie { fill: none; stroke: #e7c69a; stroke-width: 12; stroke-linecap: round; }
 .shelf-board { fill: #7f5c49; stroke: #292522; stroke-width: 8; stroke-linejoin: round; }

@@ -10,18 +10,19 @@ import java.time.LocalDate;
 import java.util.List;
 
 public interface PersonalRecordService {
-    PersonalRecordDetailDto createRecord(PersonalRecordCreateDto request);
+    PersonalRecordDetailDto createRecord(long userId, PersonalRecordCreateDto request);
 
-    PersonalRecordPageDto listRecords(Integer page, Integer pageSize, String recordType);
+    PersonalRecordPageDto listRecords(long userId, Integer page, Integer pageSize, String recordType);
 
     PersonalRecordActivityDto getActivity(
-            LocalDate startDate, LocalDate endDate, String recordType);
+            long userId, LocalDate startDate, LocalDate endDate, String recordType);
 
-    PersonalRecordDetailDto getRecord(Long recordId);
+    PersonalRecordDetailDto getRecord(long userId, Long recordId);
 
-    PersonalRecordDetailDto updateRecord(Long recordId, PersonalRecordUpdateDto request);
+    PersonalRecordDetailDto updateRecord(
+            long userId, Long recordId, PersonalRecordUpdateDto request);
 
-    void deleteRecord(Long recordId, Integer version);
+    void deleteRecord(long userId, Long recordId, Integer version);
 
-    List<PersonalRecordRecallDto> listRecalls(Integer limit);
+    List<PersonalRecordRecallDto> listRecalls(long userId, Integer limit);
 }

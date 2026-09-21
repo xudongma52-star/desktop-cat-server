@@ -19,6 +19,7 @@ import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.context.SecurityContextRepository;
+import org.springframework.security.web.authentication.RememberMeServices;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -36,14 +37,17 @@ public class AuthController {
     private final AuthApplicationService authApplicationService;
     private final AuthenticationManager authenticationManager;
     private final SecurityContextRepository securityContextRepository;
+    private final RememberMeServices rememberMeServices;
 
     public AuthController(
             AuthApplicationService authApplicationService,
             AuthenticationManager authenticationManager,
-            SecurityContextRepository securityContextRepository) {
+            SecurityContextRepository securityContextRepository,
+            RememberMeServices rememberMeServices) {
         this.authApplicationService = authApplicationService;
         this.authenticationManager = authenticationManager;
         this.securityContextRepository = securityContextRepository;
+        this.rememberMeServices = rememberMeServices;
     }
 
     @GetMapping("/status")
@@ -91,6 +95,7 @@ public class AuthController {
             context.setAuthentication(authentication);
             SecurityContextHolder.setContext(context);
             securityContextRepository.saveContext(context, servletRequest, servletResponse);
+            rememberMeServices.loginSuccess(servletRequest, servletResponse, authentication);
 
             AuthStatusDto status = authApplicationService.getStatus(authentication.getName());
             if (!status.authenticated()) {

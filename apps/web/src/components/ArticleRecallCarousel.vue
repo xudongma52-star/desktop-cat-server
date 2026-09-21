@@ -33,7 +33,7 @@ function startTimer() {
   if (disposed || !canRotate.value || isAutoPaused.value) return
   timer = window.setInterval(() => {
     currentIndex.value = (currentIndex.value + 1) % records.value.length
-  }, 8000)
+  }, 2000)
 }
 
 function move(step: number) {

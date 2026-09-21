@@ -7,9 +7,9 @@ Vue 3 + Electron + Spring Boot 3 + JDK 21，使用原生 MyBatis。当前已实�
 ## 当前范围
 
 - 已建立 Vue、TypeScript、Vite、Router 和 Pinia 前端，并完成首页、文章列表、创建、详情、编辑和删除页面。
-- 已建立 Spring Boot 3.5.16 后端，加入 Validation、Actuator、MyBatis Starter 3.0.5、Flyway 和 PostgreSQL 驱动。
-- 默认连接本机 PostgreSQL；应用启动时由 Flyway 依次执行 V1–V5 迁移。需要脱离数据库开发时可显式启用 `local` 配置。
-- 已完成用户名注册、登录、退出和登录状态恢复。密码使用 BCrypt 哈希保存，服务端通过 `JSESSIONID` 维持会话，写请求使用 CSRF Cookie 与请求头校验；除认证入口、运行状态和健康检查外，`/api/**` 均要求登录。
+- 已建立 Spring Boot 3.5.16 后端，加入 Validation、Actuator、MyBatis Starter 3.0.5、Flyway、PostgreSQL、Spring Session 和 Redis。
+- 默认连接本机 PostgreSQL 与 Redis；应用启动时由 Flyway 依次执行数据库迁移。需要脱离数据库开发时可显式启用 `local` 配置。
+- 已完成统一身份登录闭环。Web 使用 Redis 持久化 `JSESSIONID` 对应的 12 小时会话，并使用 30 天签名 Remember-Me Cookie；桌面猫通过系统浏览器和 PKCE 获得设备凭证，再静默换取 15 分钟 Access Token。一次性授权码和 Access Token 只以摘要作为 Redis 键并按有效期自动清理；密码使用 BCrypt 哈希，长期设备凭证只保存 SHA-256 摘要。除认证入口、运行状态和健康检查外，`/api/**` 均要求登录。
 - 网页提供 `/login` 和 `/register` 页面，Pinia 保存当前用户状态，路由守卫会把未登录访问重定向到登录页，并在登录后返回原目标页面。
 - 已建立 Electron 桌面端：透明无边框窗口、置顶显示、透明区域鼠标穿透、拖动、真实猫叫、活动状态、自由移动、主动陪伴对话、托盘显隐与退出、窗口位置记忆和 Windows 安装包。
 - 当前 Q 版黑猫根据自己的猫照片生成，保留纯黑毛、圆脸、厚爪与琥珀眼；多组透明 PNG 精灵图配合 CSS 表现发呆、睡觉、舔毛、玩耍、吃冻干、散步和奔跑七种活动。
@@ -20,7 +20,7 @@ Vue 3 + Electron + Spring Boot 3 + JDK 21，使用原生 MyBatis。当前已实�
 - 已完成 `reminder` 待办提醒表和网站管理页：可创建、修改、完成和删除一次性提醒，并查看今天或全部未完成事项。提醒变更通过 SSE 实时同步到网页和桌面猫，每 5 分钟低频校准一次；桌面猫每 5 秒在本地检查到期时间，断网时继续使用缓存，到点会出现并喵一声，可直接标记完成。
 - 首页文章温馨回忆轮播会读取主动开启 `recall_enabled` 的记录，支持上一条、下一条、暂停和自动轮播；目前只包含文字文章。
 - 图片回忆轮播、重复提醒、RAG 实际检索、拖拽投喂冻干和开机自启尚未实现；相关开关或接入位置只作为后续扩展边界。
-- 开发服务绑定本机地址，当前框架用于本地学习；正式发布前仍需补齐 HTTPS、会话持久化及部署配置。
+- 开发服务与 Redis 端口都只绑定本机地址，当前框架用于本地学习；正式发布前仍需补齐 HTTPS 与部署配置。
 
 ## 环境
 
@@ -37,7 +37,14 @@ cd D:\repository
 pnpm install
 ```
 
-确认本机 PostgreSQL 已启动，默认连接参数为 `127.0.0.1:5432/postgres`、用户 `postgres`、密码 `postgres`。打开第一个终端，启动后端：
+确认本机 PostgreSQL 已启动，默认连接参数为 `127.0.0.1:5432/postgres`、用户 `postgres`、密码 `postgres`。同时确认 Docker Redis 容器已启动；当前开发容器名为 `desktop-cat-redis`，只映射到 `127.0.0.1:6380`，未配置账号密码：
+
+```powershell
+docker start desktop-cat-redis
+docker exec desktop-cat-redis redis-cli ping
+```
+
+看到 `PONG` 后，打开第一个终端启动后端：
 
 ```powershell
 cd D:\repository\services\server
@@ -62,7 +69,7 @@ cd D:\repository
 pnpm dev:desktop
 ```
 
-桌面猫启动时读取一次资料，之后保持一条 SSE 连接；收到资料或提醒变更事件时才重新读取对应数据。断线后按 1、2、5、10、30 秒逐级重连，并每 5 分钟低频校准一次，避免漏掉离线期间的更新。后端不可用时读取本地缓存并继续运行。桌面猫使用 `reminder_id:version` 标记已经展示的提醒版本；编辑提醒会生成新版本并重新进入到期检查，断网时仍可执行已缓存的提醒。网页订阅同一事件流，桌面猫完成提醒后会自动刷新列表。远程部署后通过 `DESKTOP_CAT_API_URL` 指定服务地址。单击小猫会播放真实猫叫并打开活动面板，可以请求发呆、睡觉、舔毛、玩耍、吃冻干、散步或奔跑；小猫可能按活动设定接受或拒绝，活动结束后会自主选择下一项。玩耍、散步和奔跑时，窗口会在当前显示器可用区域内自由移动、随机转向并在屏幕边缘折返；打开选择面板或拖动小猫时会暂停自动移动。活动面板右上角的记录按钮会打开一个文本框，按 Enter 发送、Shift+Enter 换行；发送失败时草稿保留在本地。
+桌面猫首次启动时通过系统默认浏览器连接当前 Web 账号；浏览器已有登录状态时无需再次输入密码。设备凭证由 Electron `safeStorage` 加密保存，后续启动会静默换取临时 Access Token；托盘菜单可以重新登录或撤销本机授权。随后桌面猫读取资料并保持一条带身份的 SSE 连接；收到资料或提醒变更事件时才重新读取对应数据。断线后按 1、2、5、10、30 秒逐级重连，并每 5 分钟低频校准一次，避免漏掉离线期间的更新。后端不可用时读取本地缓存并继续运行。桌面猫使用 `reminder_id:version` 标记已经展示的提醒版本；编辑提醒会生成新版本并重新进入到期检查，断网时仍可执行已缓存的提醒。网页订阅同一事件流，桌面猫完成提醒后会自动刷新列表。远程部署后通过 `DESKTOP_CAT_API_URL` 指定服务地址，并通过 `DESKTOP_CAT_WEB_URL` 指定统一登录网页地址。单击小猫会播放真实猫叫并打开活动面板，可以请求发呆、睡觉、舔毛、玩耍、吃冻干、散步或奔跑；小猫可能按活动设定接受或拒绝，活动结束后会自主选择下一项。玩耍、散步和奔跑时，窗口会在当前显示器可用区域内自由移动、随机转向并在屏幕边缘折返；打开选择面板或拖动小猫时会暂停自动移动。活动面板右上角的记录按钮会打开一个文本框，按 Enter 发送、Shift+Enter 换行；发送失败时草稿保留在本地。
 
 小猫会结合早晨、中午、下午、傍晚和夜间主动说不同的陪伴话语，通常每 16–32 秒更新一次，并尽量避免最近出现过的内容。摸摸小猫时会随机回应并暂时保留这句话，随后继续日常对话。活动面板只展示当前状态和可选活动，不显示倒计时及活动时长。
 
@@ -79,6 +86,8 @@ pnpm dist:desktop
 
 ## 请求是怎么走的
 
+登录注册、Redis Session、Remember-Me 和 Electron PKCE 的逐段源码说明见 [登录注册与认证源码解析](./登录注册与认证源码解析.md)。
+
 登录注册链路如下：
 
 ```text
@@ -87,11 +96,14 @@ LoginView.vue / RegisterView.vue
   → src/api/auth.ts
   → AuthController
   → Spring Security 会话与 CSRF 校验
+  → Spring Session Redis 保存会话
   → AuthApplicationService + AppUserDao
   → PostgreSQL app_user
 ```
 
-网页启动时先调用 `GET /api/auth/status` 恢复登录状态。注册成功会自动建立会话；后续请求携带 `JSESSIONID`，非安全方法同时从 `XSRF-TOKEN` Cookie 读取令牌并写入 `X-XSRF-TOKEN` 请求头。密码只以 BCrypt 哈希写入数据库，不保存或返回明文。
+网页启动时先调用 `GET /api/auth/status` 恢复登录状态。注册或登录成功会在 Redis 建立 12 小时空闲会话，并签发 30 天 HttpOnly Remember-Me Cookie；浏览器关闭、后端重启或内存释放后仍可恢复登录。后续请求携带 `JSESSIONID`，非安全方法同时从 `XSRF-TOKEN` Cookie 读取令牌并写入 `X-XSRF-TOKEN` 请求头。密码只以 BCrypt 哈希写入数据库，不保存或返回明文。
+
+桌面猫生成 PKCE verifier，在 `127.0.0.1` 随机端口监听一次性回调，然后打开 `/desktop/connect`。Web 复用当前登录状态签发两分钟授权码；桌面猫校验回调 `state` 并用 verifier 换取设备凭证和 15 分钟 Access Token。一次性授权码和临时 Token 存入 Redis 并设置对应 TTL，因此后端重启不会使仍在有效期内的状态丢失。设备凭证有效期 90 天，明文只进入系统安全存储，数据库 `auth_device` 只保存摘要；临时 Token 失效后，桌面猫会使用设备凭证自动恢复。
 
 ```text
 RecordEditorView.vue
@@ -118,6 +130,10 @@ RecordEditorView.vue
 | `POST /api/auth/register` | 注册账号并自动登录；用户名 3–32 个字符，密码至少 6 个字符且不超过 72 个 UTF-8 字节 |
 | `POST /api/auth/login` | 使用用户名和密码登录 |
 | `POST /api/auth/logout` | 退出登录并清理会话 Cookie |
+| `POST /api/auth/desktop/authorize` | 已登录网页为桌面猫签发一次性 PKCE 授权码 |
+| `POST /api/auth/desktop/exchange` | 桌面猫用授权码和 verifier 换取设备凭证及临时 Token |
+| `POST /api/auth/desktop/refresh` | 使用设备凭证静默换取新的临时 Token |
+| `POST /api/auth/desktop/revoke` | 撤销本机设备凭证 |
 | `POST /api/records` | 创建文章 |
 | `GET /api/records?page=1&pageSize=12&recordType=` | 分页查询文章，可按类型筛选 |
 | `GET /api/records/activity?startDate=&endDate=&recordType=DIARY` | 按日期统计每天的日记篇数 |
@@ -189,6 +205,8 @@ cd services\server
 
 2026-09-18 已验证：登录、注册、退出、登录状态恢复、会话保护及 CSRF 请求处理已接入网页和后端；网页生产构建通过，Maven Wrapper 测试共 20 项通过。Flyway V5 新增 `app_user` 用户表，认证相关测试覆盖注册成功、重复用户名、参数校验、登录成功、错误凭据、匿名状态和受保护接口。
 
+2026-09-20 已验证：Spring Session 已连接 Docker Redis，Actuator 健康状态为 `UP`，Lettuce 客户端实际建立连接；Web 会话、桌面端两分钟授权码和 15 分钟 Access Token 均已改由 Redis 承载。Maven Wrapper 测试共 27 项通过。
+
 ## PostgreSQL 连接配置
 
 默认配置可直接连接当前本机数据库：
@@ -206,10 +224,14 @@ $env:SPRING_PROFILES_ACTIVE = 'postgres'
 $env:DB_URL = 'jdbc:postgresql://127.0.0.1:5432/postgres'
 $env:DB_USERNAME = 'postgres'
 $env:DB_PASSWORD = '替换为本地数据库密码'
+$env:REDIS_HOST = '127.0.0.1'
+$env:REDIS_PORT = '6380'
 .\mvnw.cmd spring-boot:run
 ```
 
-服务器部署时必须通过环境变量提供真实密码，不要把服务器密码提交到仓库。应用首次启动时，Flyway 会在目标数据库创建 `flyway_schema_history`、`cat_profile`、`personal_record`、`daily_emotion`、`reminder` 和 `app_user`；业务主键分别使用 `profile_id`、`record_id`、`emotion_id`、`reminder_id`、`user_id`，不使用裸 `id`。V1 创建小猫资料，V2 创建文章记录，V3 创建每日情绪及日期时间索引，V4 创建待办提醒及有效提醒索引，V5 创建用户表及唯一用户名约束。
+当前本地 Redis 未启用认证并且只监听宿主机回环地址。若将 Redis 暴露到其他机器或部署到服务器，必须先由项目维护者定义 Redis 账号密码，再补充安全连接配置；不得把正式凭据提交到仓库。服务器部署时还必须通过环境变量提供真实数据库密码和稳定随机的 `AUTH_REMEMBER_ME_KEY`，HTTPS 部署同时设置 `AUTH_SECURE_COOKIES=true`。
+
+应用首次启动时，Flyway 会在目标数据库创建 `flyway_schema_history`、`cat_profile`、`personal_record`、`daily_emotion`、`reminder`、`app_user`、`auth_device` 和 `photo`；业务主键使用带含义的字段，不使用裸 `id`。V1 创建小猫资料，V2 创建文章记录，V3 创建每日情绪及日期时间索引，V4 创建待办提醒及有效提醒索引，V5 创建用户表及唯一用户名约束，V6 创建设备授权表及有效设备索引，V7 创建图片记录及回忆索引。
 
 需要临时使用不连接数据库的内存模式时：
 
@@ -222,9 +244,10 @@ $env:SPRING_PROFILES_ACTIVE = 'local'
 
 ## 常见问题
 
-- 后端启动失败：先检查 `java -version` 是 JDK 21，并查看终端首个错误。
+- 后端启动失败：先检查 `java -version` 是 JDK 21，再确认 PostgreSQL 与 `desktop-cat-redis` 均已启动，并查看终端首个错误。
 - 页面连接失败：检查后端是否启动、8080 是否被占用。默认只需要启动前后端两个进程。
-- 页面一直停留在登录页：确认后端使用默认 `postgres` 配置启动，数据库已执行 V5，并检查浏览器是否允许 `127.0.0.1` 的 Cookie。
+- 页面一直停留在登录页：确认后端使用默认 `postgres` 配置启动、数据库迁移已完成、Redis 可返回 `PONG`，并检查浏览器是否允许 `127.0.0.1` 的 Cookie。
+- 桌面猫没有弹出登录页：检查 `DESKTOP_CAT_WEB_URL` 是否指向可访问的 Web 地址；本地开发默认是 `http://127.0.0.1:5173`。
 - 写请求返回 403：刷新页面重新获取 CSRF Cookie；开发时应始终通过 `http://127.0.0.1:5173` 访问网页，避免混用 `localhost` 和 `127.0.0.1` 导致 Cookie 会话不一致。
 - Flyway 报 `relation personal_record already exists`：说明该表曾在 Flyway 之外手工创建，但 V2 尚未登记。先备份并核对数据，再让表结构与迁移历史恢复一致；不要直接修改已经提交的 V2 文件。
 - 5173 已被占用：停止原有前端进程后重启，Vite 不自动切换端口，避免访问错项目。

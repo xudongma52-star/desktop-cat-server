@@ -14,6 +14,13 @@
     updated_at
   </sql>
 
+  <select id="selectById"
+          resultType="com.desktopcat.server.identity.dao.AppUserDO">
+    SELECT <include refid="userColumns"/>
+    FROM app_user
+    WHERE user_id = #{userId}
+  </select>
+
   <select id="selectByUsername"
           resultType="com.desktopcat.server.identity.dao.AppUserDO">
     SELECT <include refid="userColumns"/>

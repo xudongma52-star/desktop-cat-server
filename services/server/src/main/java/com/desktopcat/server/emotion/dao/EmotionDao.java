@@ -9,5 +9,7 @@ import org.apache.ibatis.annotations.Param;
 public interface EmotionDao {
     int insert(EmotionDO emotion);
 
-    List<EmotionDO> selectByDate(@Param("recordDate") LocalDate recordDate);
+    List<EmotionDO> selectByDate(
+            @Param("userId") long userId,
+            @Param("recordDate") LocalDate recordDate);
 }

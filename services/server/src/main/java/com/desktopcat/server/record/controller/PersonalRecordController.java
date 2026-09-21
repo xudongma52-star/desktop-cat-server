@@ -7,6 +7,8 @@ import com.desktopcat.server.record.dto.PersonalRecordPageDto;
 import com.desktopcat.server.record.dto.PersonalRecordRecallDto;
 import com.desktopcat.server.record.dto.PersonalRecordUpdateDto;
 import com.desktopcat.server.record.service.PersonalRecordService;
+import com.desktopcat.server.identity.application.CurrentUserService;
+import java.security.Principal;
 import java.time.LocalDate;
 import java.util.List;
 import org.springframework.context.annotation.Profile;
@@ -35,10 +37,14 @@ import org.springframework.web.bind.annotation.RestController;
 public class PersonalRecordController {
     // Controller 只依赖 Service 接口，不依赖具体实现类和 DAO。
     private final PersonalRecordService personalRecordService;
+    private final CurrentUserService currentUserService;
 
     /** Spring 通过构造器注入 PersonalRecordService 的实现。 */
-    public PersonalRecordController(PersonalRecordService personalRecordService) {
+    public PersonalRecordController(
+            PersonalRecordService personalRecordService,
+            CurrentUserService currentUserService) {
         this.personalRecordService = personalRecordService;
+        this.currentUserService = currentUserService;
     }
 
     /**
@@ -51,8 +57,9 @@ public class PersonalRecordController {
     // 创建成功使用 201 Created，而不是普通查询使用的 200 OK。
     @ResponseStatus(HttpStatus.CREATED)
     public PersonalRecordDetailDto createRecord(
-            @RequestBody(required = false) PersonalRecordCreateDto request) {
-        return personalRecordService.createRecord(request);
+            @RequestBody(required = false) PersonalRecordCreateDto request,
+            Principal principal) {
+        return personalRecordService.createRecord(userId(principal), request);
     }
 
     /**
@@ -67,8 +74,9 @@ public class PersonalRecordController {
     public PersonalRecordPageDto listRecords(
             @RequestParam(defaultValue = "1") Integer page,
             @RequestParam(defaultValue = "12") Integer pageSize,
-            @RequestParam(required = false) String recordType) {
-        return personalRecordService.listRecords(page, pageSize, recordType);
+            @RequestParam(required = false) String recordType,
+            Principal principal) {
+        return personalRecordService.listRecords(userId(principal), page, pageSize, recordType);
     }
 
     /**
@@ -83,8 +91,10 @@ public class PersonalRecordController {
     public PersonalRecordActivityDto getActivity(
             @RequestParam(required = false) LocalDate startDate,
             @RequestParam(required = false) LocalDate endDate,
-            @RequestParam(defaultValue = "DIARY") String recordType) {
-        return personalRecordService.getActivity(startDate, endDate, recordType);
+            @RequestParam(defaultValue = "DIARY") String recordType,
+            Principal principal) {
+        return personalRecordService.getActivity(
+                userId(principal), startDate, endDate, recordType);
     }
 
     /**
@@ -94,8 +104,8 @@ public class PersonalRecordController {
      * @return 未删除文章的完整信息
      */
     @GetMapping("/{recordId}")
-    public PersonalRecordDetailDto getRecord(@PathVariable Long recordId) {
-        return personalRecordService.getRecord(recordId);
+    public PersonalRecordDetailDto getRecord(@PathVariable Long recordId, Principal principal) {
+        return personalRecordService.getRecord(userId(principal), recordId);
     }
 
     /**
@@ -108,8 +118,9 @@ public class PersonalRecordController {
     @PutMapping("/{recordId}")
     public PersonalRecordDetailDto updateRecord(
             @PathVariable Long recordId,
-            @RequestBody(required = false) PersonalRecordUpdateDto request) {
-        return personalRecordService.updateRecord(recordId, request);
+            @RequestBody(required = false) PersonalRecordUpdateDto request,
+            Principal principal) {
+        return personalRecordService.updateRecord(userId(principal), recordId, request);
     }
 
     /**
@@ -123,8 +134,9 @@ public class PersonalRecordController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void deleteRecord(
             @PathVariable Long recordId,
-            @RequestParam(required = false) Integer version) {
-        personalRecordService.deleteRecord(recordId, version);
+            @RequestParam(required = false) Integer version,
+            Principal principal) {
+        personalRecordService.deleteRecord(userId(principal), recordId, version);
     }
 
     /**
@@ -135,7 +147,12 @@ public class PersonalRecordController {
      */
     @GetMapping("/recalls")
     public List<PersonalRecordRecallDto> listRecalls(
-            @RequestParam(defaultValue = "10") Integer limit) {
-        return personalRecordService.listRecalls(limit);
+            @RequestParam(defaultValue = "10") Integer limit,
+            Principal principal) {
+        return personalRecordService.listRecalls(userId(principal), limit);
+    }
+
+    private long userId(Principal principal) {
+        return currentUserService.requireUserId(principal == null ? null : principal.getName());
     }
 }

@@ -1,4 +1,7 @@
-import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
+import { createHash, randomBytes } from 'node:crypto'
+import { existsSync, mkdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
+import { createServer } from 'node:http'
+import { hostname } from 'node:os'
 import { dirname, join } from 'node:path'
 import {
   app,
@@ -7,7 +10,9 @@ import {
   Menu,
   nativeImage,
   powerMonitor,
+  safeStorage,
   screen,
+  shell,
   Tray,
   type Rectangle,
 } from 'electron'
@@ -34,7 +39,16 @@ const MIN_VISIBLE_SIZE = 36
 const MOVEMENT_TICK_MS = 50
 const PROFILE_RECONCILE_INTERVAL_MS = 5 * 60_000
 const PROFILE_EVENT_RETRY_DELAYS_MS = [1_000, 2_000, 5_000, 10_000, 30_000] as const
-const ASSISTANT_API_URL = process.env.DESKTOP_CAT_API_URL ?? 'http://127.0.0.1:8080'
+// 本地开发继续使用本机服务；安装后的客户端默认连接正式站点，仍允许环境变量覆盖以便联调。
+const DEFAULT_REMOTE_APP_URL = 'https://maxmeme.cn'
+const ASSISTANT_API_URL = process.env.DESKTOP_CAT_API_URL
+  ?? (app.isPackaged ? DEFAULT_REMOTE_APP_URL : 'http://127.0.0.1:8080')
+const WEB_APP_URL = process.env.DESKTOP_CAT_WEB_URL
+  ?? (app.isPackaged ? DEFAULT_REMOTE_APP_URL : 'http://127.0.0.1:5173')
+const DESKTOP_AUTHORIZE_URL = `${WEB_APP_URL}/desktop/connect`
+const DESKTOP_EXCHANGE_API_URL = `${ASSISTANT_API_URL}/api/auth/desktop/exchange`
+const DESKTOP_REFRESH_API_URL = `${ASSISTANT_API_URL}/api/auth/desktop/refresh`
+const DESKTOP_REVOKE_API_URL = `${ASSISTANT_API_URL}/api/auth/desktop/revoke`
 const CAT_PROFILE_API_URL = `${ASSISTANT_API_URL}/api/cat/profile`
 const ASSISTANT_EVENTS_API_URL = `${ASSISTANT_API_URL}/api/events`
 const EMOTIONS_API_URL = `${ASSISTANT_API_URL}/api/emotions`
@@ -56,6 +70,15 @@ type ServerEvent = { event: string; data: string }
 type CatProfileUpdatedEvent = { profileId: number; version: number }
 type ReminderChangedEvent = { reminderId: number; version: number; action: string }
 type ReminderCache = { reminders: Reminder[]; notifiedTokens: string[] }
+type StoredAuthState = { encryptedCredential: string }
+type DesktopTokenResponse = {
+  accessToken: string
+  accessTokenExpiresAt: string
+  deviceId: string
+  deviceCredential: string | null
+  userId: number
+  username: string
+}
 
 let catWindow: BrowserWindow | null = null
 let tray: Tray | null = null
@@ -84,6 +107,11 @@ let reminderSyncTimer: NodeJS.Timeout | undefined
 let reminderDueCheckTimer: NodeJS.Timeout | undefined
 let reminderSyncFailed = false
 let reminderSyncInFlight: Promise<void> | undefined
+let deviceCredential: string | undefined
+let accessToken: string | undefined
+let accessTokenExpiresAt = 0
+let authenticatedUsername: string | undefined
+let authenticationInFlight: Promise<string> | undefined
 
 let currentActivity: CatActivitySnapshot = {
   id: 'idle',
@@ -107,6 +135,262 @@ function getCatProfilePath(): string {
 
 function getReminderCachePath(): string {
   return join(app.getPath('userData'), 'reminder-cache.json')
+}
+
+function getAuthStatePath(): string {
+  return join(app.getPath('userData'), 'auth-state.json')
+}
+
+function loadDeviceCredential(): void {
+  const authStatePath = getAuthStatePath()
+  if (!existsSync(authStatePath) || !safeStorage.isEncryptionAvailable()) return
+
+  try {
+    const state = JSON.parse(readFileSync(authStatePath, 'utf8')) as Partial<StoredAuthState>
+    if (typeof state.encryptedCredential !== 'string' || !state.encryptedCredential) return
+    const credential = safeStorage.decryptString(Buffer.from(state.encryptedCredential, 'base64'))
+    if (credential.includes('.')) deviceCredential = credential
+  } catch (error) {
+    console.warn('Failed to restore the desktop authentication state.', error)
+  }
+}
+
+function saveDeviceCredential(credential: string): void {
+  if (!safeStorage.isEncryptionAvailable()) {
+    throw new Error('Secure credential storage is unavailable on this device.')
+  }
+
+  const authStatePath = getAuthStatePath()
+  mkdirSync(dirname(authStatePath), { recursive: true })
+  const state: StoredAuthState = {
+    encryptedCredential: safeStorage.encryptString(credential).toString('base64'),
+  }
+  writeFileSync(authStatePath, JSON.stringify(state, null, 2), 'utf8')
+  deviceCredential = credential
+}
+
+function clearDeviceCredential(): void {
+  deviceCredential = undefined
+  accessToken = undefined
+  accessTokenExpiresAt = 0
+  authenticatedUsername = undefined
+  const authStatePath = getAuthStatePath()
+  try {
+    if (existsSync(authStatePath)) unlinkSync(authStatePath)
+  } catch (error) {
+    console.warn('Failed to remove the desktop authentication state.', error)
+  }
+  updateTrayMenu()
+}
+
+function base64Url(bytes: Buffer): string {
+  return bytes.toString('base64url')
+}
+
+function isDesktopTokenResponse(value: unknown): value is DesktopTokenResponse {
+  if (!value || typeof value !== 'object') return false
+  const candidate = value as Partial<DesktopTokenResponse>
+  return typeof candidate.accessToken === 'string'
+    && candidate.accessToken.startsWith('dcat_')
+    && typeof candidate.accessTokenExpiresAt === 'string'
+    && !Number.isNaN(Date.parse(candidate.accessTokenExpiresAt))
+    && typeof candidate.deviceId === 'string'
+    && (candidate.deviceCredential === null || typeof candidate.deviceCredential === 'string')
+    && Number.isSafeInteger(candidate.userId)
+    && typeof candidate.username === 'string'
+}
+
+async function postAuthenticationRequest(
+  url: string,
+  body: Record<string, string>,
+): Promise<DesktopTokenResponse> {
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(8_000),
+  })
+  if (!response.ok) {
+    const error = new Error(`Authentication request returned HTTP ${response.status}.`)
+    Object.assign(error, { status: response.status })
+    throw error
+  }
+  const candidate: unknown = await response.json()
+  if (!isDesktopTokenResponse(candidate)) {
+    throw new Error('Authentication response is invalid.')
+  }
+  return candidate
+}
+
+function acceptTokenResponse(response: DesktopTokenResponse): string {
+  const wasAuthenticated = Boolean(authenticatedUsername)
+  accessToken = response.accessToken
+  accessTokenExpiresAt = Date.parse(response.accessTokenExpiresAt)
+  authenticatedUsername = response.username
+  if (response.deviceCredential) saveDeviceCredential(response.deviceCredential)
+  updateTrayMenu()
+  if (!wasAuthenticated && (profileReconcileTimer || reminderSyncTimer)) {
+    reconnectProfileEvents()
+    resumeReminderSync()
+  }
+  return response.accessToken
+}
+
+async function refreshDesktopAccessToken(): Promise<string> {
+  if (!deviceCredential) throw new Error('Desktop device is not authorized.')
+  try {
+    return acceptTokenResponse(await postAuthenticationRequest(
+      DESKTOP_REFRESH_API_URL,
+      { deviceCredential },
+    ))
+  } catch (error) {
+    if ((error as { status?: number }).status === 401) clearDeviceCredential()
+    throw error
+  }
+}
+
+async function openBrowserAuthorization(): Promise<string> {
+  if (!safeStorage.isEncryptionAvailable()) {
+    throw new Error('Secure credential storage is unavailable on this device.')
+  }
+  const codeVerifier = base64Url(randomBytes(32))
+  const codeChallenge = base64Url(createHash('sha256').update(codeVerifier).digest())
+  const state = base64Url(randomBytes(24))
+
+  let resolveCode: ((code: string) => void) | undefined
+  let rejectCode: ((reason: Error) => void) | undefined
+  const codePromise = new Promise<string>((resolve, reject) => {
+    resolveCode = resolve
+    rejectCode = reject
+  })
+
+  const callbackServer = createServer((request, response) => {
+    try {
+      const callback = new URL(request.url ?? '/', 'http://127.0.0.1')
+      if (callback.pathname !== '/callback') {
+        response.writeHead(404).end()
+        return
+      }
+      const returnedState = callback.searchParams.get('state')
+      const code = callback.searchParams.get('code')
+      if (returnedState !== state || !code) {
+        response.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' })
+        response.end('登录回调无效，请回到桌面猫重试。')
+        rejectCode?.(new Error('Desktop authorization callback is invalid.'))
+        return
+      }
+
+      response.writeHead(200, {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Cache-Control': 'no-store',
+      })
+      response.end('<!doctype html><meta charset="utf-8"><title>连接成功</title><style>body{font:16px system-ui;display:grid;place-items:center;min-height:80vh;color:#435443;background:#fffaf0}</style><p>桌面猫已经认出你了，可以关闭这个页面。</p>')
+      resolveCode?.(code)
+    } catch (error) {
+      response.writeHead(400).end()
+      rejectCode?.(error instanceof Error ? error : new Error('Desktop authorization failed.'))
+    }
+  })
+
+  await new Promise<void>((resolve, reject) => {
+    callbackServer.once('error', reject)
+    callbackServer.listen(0, '127.0.0.1', () => resolve())
+  })
+
+  const address = callbackServer.address()
+  if (!address || typeof address === 'string') {
+    callbackServer.close()
+    throw new Error('Desktop authorization callback could not be started.')
+  }
+  const redirectUri = `http://127.0.0.1:${address.port}/callback`
+  const authorizationUrl = new URL(DESKTOP_AUTHORIZE_URL)
+  authorizationUrl.searchParams.set('redirect_uri', redirectUri)
+  authorizationUrl.searchParams.set('code_challenge', codeChallenge)
+  authorizationUrl.searchParams.set('state', state)
+  authorizationUrl.searchParams.set('device_name', `${hostname()} 的电脑`)
+  authorizationUrl.searchParams.set('platform', process.platform)
+  authorizationUrl.searchParams.set('app_version', app.getVersion())
+
+  const timeout = setTimeout(() => {
+    rejectCode?.(new Error('Desktop authorization timed out.'))
+  }, 5 * 60_000)
+
+  try {
+    await shell.openExternal(authorizationUrl.toString())
+    const code = await codePromise
+    return acceptTokenResponse(await postAuthenticationRequest(
+      DESKTOP_EXCHANGE_API_URL,
+      { code, codeVerifier, redirectUri },
+    ))
+  } finally {
+    clearTimeout(timeout)
+    callbackServer.close()
+  }
+}
+
+async function ensureAccessToken(interactive: boolean): Promise<string> {
+  if (accessToken && accessTokenExpiresAt > Date.now() + 30_000) return accessToken
+  if (authenticationInFlight) return authenticationInFlight
+
+  authenticationInFlight = (async () => {
+    if (deviceCredential) {
+      try {
+        return await refreshDesktopAccessToken()
+      } catch (error) {
+        if (!interactive || deviceCredential) throw error
+      }
+    }
+    if (!interactive) throw new Error('Desktop authentication is required.')
+    return openBrowserAuthorization()
+  })()
+
+  try {
+    return await authenticationInFlight
+  } finally {
+    authenticationInFlight = undefined
+  }
+}
+
+async function authenticatedFetch(
+  input: string,
+  init: RequestInit = {},
+  interactive = false,
+): Promise<Response> {
+  let token = await ensureAccessToken(interactive)
+  const send = (): Promise<Response> => {
+    const headers = new Headers(init.headers)
+    headers.set('Authorization', `Bearer ${token}`)
+    return fetch(input, { ...init, headers })
+  }
+
+  let response = await send()
+  if (response.status === 401) {
+    accessToken = undefined
+    accessTokenExpiresAt = 0
+    token = await ensureAccessToken(interactive)
+    response = await send()
+  }
+  return response
+}
+
+async function revokeDesktopDevice(): Promise<void> {
+  const credential = deviceCredential
+  try {
+    if (credential) {
+      const response = await fetch(DESKTOP_REVOKE_API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deviceCredential: credential }),
+        signal: AbortSignal.timeout(8_000),
+      })
+      if (!response.ok && response.status !== 401) {
+        throw new Error(`Device revoke request returned HTTP ${response.status}.`)
+      }
+    }
+    clearDeviceCredential()
+  } catch (error) {
+    console.warn('Desktop logout could not be completed; the local credential was kept.', error)
+  }
 }
 
 function isCatProfile(value: unknown): value is CatProfile {
@@ -189,7 +473,7 @@ function checkDueReminders(): void {
 
 async function performReminderSync(): Promise<void> {
   try {
-    const response = await fetch(`${REMINDERS_API_URL}?scope=PENDING`, {
+    const response = await authenticatedFetch(`${REMINDERS_API_URL}?scope=PENDING`, {
       signal: AbortSignal.timeout(5_000),
     })
     if (!response.ok) throw new Error(`Reminder request returned HTTP ${response.status}.`)
@@ -229,12 +513,12 @@ async function syncReminders(): Promise<void> {
 }
 
 async function completeReminder(reminderId: number, version: number): Promise<Reminder> {
-  const response = await fetch(`${REMINDERS_API_URL}/${reminderId}/complete`, {
+  const response = await authenticatedFetch(`${REMINDERS_API_URL}/${reminderId}/complete`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ version }),
     signal: AbortSignal.timeout(5_000),
-  })
+  }, true)
   if (!response.ok) throw new Error(`Complete reminder request returned HTTP ${response.status}.`)
   const candidate: unknown = await response.json()
   if (!candidate || typeof candidate !== 'object') throw new Error('Complete reminder response is invalid.')
@@ -259,12 +543,12 @@ function resumeReminderSync(): void {
 }
 
 async function createEmotion(content: string): Promise<Emotion> {
-  const response = await fetch(EMOTIONS_API_URL, {
+  const response = await authenticatedFetch(EMOTIONS_API_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ content }),
     signal: AbortSignal.timeout(5_000),
-  })
+  }, true)
   if (!response.ok) throw new Error(`Emotion request returned HTTP ${response.status}.`)
   const candidate: unknown = await response.json()
   if (!isEmotion(candidate)) throw new Error('Emotion response is invalid.')
@@ -294,7 +578,10 @@ function saveCatProfile(): void {
 
 async function performCatProfileSync(): Promise<void> {
   try {
-    const response = await fetch(CAT_PROFILE_API_URL, { signal: AbortSignal.timeout(4_000) })
+    const response = await authenticatedFetch(
+      CAT_PROFILE_API_URL,
+      { signal: AbortSignal.timeout(4_000) },
+    )
     if (!response.ok) throw new Error(`Cat profile request returned HTTP ${response.status}.`)
     const candidate: unknown = await response.json()
     if (!isCatProfile(candidate)) throw new Error('Cat profile response is invalid.')
@@ -414,7 +701,7 @@ async function connectProfileEvents(): Promise<void> {
   profileEventAbortController = abortController
 
   try {
-    const response = await fetch(ASSISTANT_EVENTS_API_URL, {
+    const response = await authenticatedFetch(ASSISTANT_EVENTS_API_URL, {
       headers: { Accept: 'text/event-stream' },
       signal: abortController.signal,
     })
@@ -973,12 +1260,33 @@ function createTrayIcon(): Electron.NativeImage {
   return nativeImage.createFromBitmap(pixels, { width: size, height: size })
 }
 
-function createTray(): void {
-  tray = new Tray(createTrayIcon())
-  tray.setToolTip('猫的角落')
+function updateTrayMenu(): void {
+  if (!tray || tray.isDestroyed()) return
+  const accountLabel = authenticatedUsername
+    ? `已登录：${authenticatedUsername}`
+    : deviceCredential
+      ? '正在恢复登录…'
+      : '登录账号…'
+
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: '显示小猫（主屏幕）', click: () => showCat(true) },
     { label: '隐藏小猫', click: () => catWindow?.hide() },
+    { type: 'separator' },
+    {
+      label: accountLabel,
+      enabled: !authenticatedUsername,
+      click: () => {
+        void ensureAccessToken(true).catch((error) => {
+          console.warn('Desktop authentication did not complete.', error)
+        })
+      },
+    },
+    ...(deviceCredential
+      ? [{
+          label: '退出账号',
+          click: () => void revokeDesktopDevice(),
+        } satisfies Electron.MenuItemConstructorOptions]
+      : []),
     { type: 'separator' },
     {
       label: '退出',
@@ -988,6 +1296,12 @@ function createTray(): void {
       },
     },
   ]))
+}
+
+function createTray(): void {
+  tray = new Tray(createTrayIcon())
+  tray.setToolTip('猫的角落')
+  updateTrayMenu()
   tray.on('click', () => showCat(true))
 }
 
@@ -1079,12 +1393,16 @@ if (!hasSingleInstanceLock) {
   app.whenReady().then(() => {
     app.setAppUserModelId('com.desktopcat.corner')
     registerIpcHandlers()
+    loadDeviceCredential()
     loadCompanionState()
     loadCatProfile()
     loadReminderCache()
     createCatWindow()
     createTray()
     startActivity('idle')
+    void ensureAccessToken(true).catch((error) => {
+      console.warn('Desktop authentication is waiting for the user.', error)
+    })
     startCatProfileSync()
     startReminderSync()
     powerMonitor.on('resume', reconnectProfileEvents)

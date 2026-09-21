@@ -6,6 +6,7 @@ import java.time.LocalDate;
 /** 与 personal_record 表字段对应的数据库对象，仅供 DAO 和 Service 实现层使用。 */
 public class PersonalRecordDO {
     private Long recordId;
+    private Long userId;
     private String recordType;
     private String title;
     private String content;
@@ -22,6 +23,7 @@ public class PersonalRecordDO {
 
     public PersonalRecordDO(
             Long recordId,
+            Long userId,
             String recordType,
             String title,
             String content,
@@ -33,6 +35,7 @@ public class PersonalRecordDO {
             Instant createdAt,
             Instant updatedAt) {
         this.recordId = recordId;
+        this.userId = userId;
         this.recordType = recordType;
         this.title = title;
         this.content = content;
@@ -51,6 +54,14 @@ public class PersonalRecordDO {
 
     public void setRecordId(Long recordId) {
         this.recordId = recordId;
+    }
+
+    public Long getUserId() {
+        return userId;
+    }
+
+    public void setUserId(Long userId) {
+        this.userId = userId;
     }
 
     public String getRecordType() {

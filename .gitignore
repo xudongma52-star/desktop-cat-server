@@ -13,5 +13,7 @@ target/
 .env.local
 .env.*.local
 *.log
+services/server/data/
+depl/
 Thumbs.db
 .DS_Store

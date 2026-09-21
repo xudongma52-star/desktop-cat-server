@@ -15,6 +15,7 @@ import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
@@ -33,6 +34,26 @@ public class GlobalExceptionHandler {
             Map.entry("Password must not exceed 72 UTF-8 bytes.", "PASSWORD_TOO_LONG"),
             Map.entry("User could not be created.", "USER_CREATE_FAILED"),
             Map.entry("Invalid username or password.", "INVALID_CREDENTIALS"),
+            Map.entry("Desktop authorization request is required.", "DESKTOP_AUTH_REQUEST_REQUIRED"),
+            Map.entry("Desktop token request is required.", "DESKTOP_TOKEN_REQUEST_REQUIRED"),
+            Map.entry("Redirect URI is required.", "REDIRECT_URI_REQUIRED"),
+            Map.entry("Redirect URI is invalid.", "REDIRECT_URI_INVALID"),
+            Map.entry("PKCE code challenge is invalid.", "PKCE_CHALLENGE_INVALID"),
+            Map.entry("PKCE code verifier is invalid.", "PKCE_VERIFIER_INVALID"),
+            Map.entry("Authorization state is invalid.", "AUTHORIZATION_STATE_INVALID"),
+            Map.entry("Authorization code is required.", "AUTHORIZATION_CODE_REQUIRED"),
+            Map.entry("Authorization code is invalid or expired.", "AUTHORIZATION_CODE_INVALID"),
+            Map.entry("Authorization code verification failed.", "AUTHORIZATION_CODE_VERIFICATION_FAILED"),
+            Map.entry("Authorization code has already been used.", "AUTHORIZATION_CODE_ALREADY_USED"),
+            Map.entry("Device name is required.", "DEVICE_NAME_REQUIRED"),
+            Map.entry("Device name is too long.", "DEVICE_NAME_TOO_LONG"),
+            Map.entry("Device platform is required.", "DEVICE_PLATFORM_REQUIRED"),
+            Map.entry("Device platform is too long.", "DEVICE_PLATFORM_TOO_LONG"),
+            Map.entry("App version is too long.", "APP_VERSION_TOO_LONG"),
+            Map.entry("Device credential is required.", "DEVICE_CREDENTIAL_REQUIRED"),
+            Map.entry("Device credential is invalid or expired.", "DEVICE_CREDENTIAL_INVALID"),
+            Map.entry("User account is unavailable.", "USER_ACCOUNT_UNAVAILABLE"),
+            Map.entry("Desktop device could not be authorized.", "DESKTOP_DEVICE_CREATE_FAILED"),
             Map.entry("Profile id is required.", "PROFILE_ID_REQUIRED"),
             Map.entry("Profile id must be positive.", "PROFILE_ID_INVALID"),
             Map.entry("Cat name is required.", "CAT_NAME_REQUIRED"),
@@ -90,7 +111,19 @@ public class GlobalExceptionHandler {
             Map.entry("Reminder has been updated. Refresh and try again.",
                     "REMINDER_VERSION_CONFLICT"),
             Map.entry("Reminder could not be created.", "REMINDER_CREATE_FAILED"),
-            Map.entry("Reminder could not be updated.", "REMINDER_UPDATE_FAILED"));
+            Map.entry("Reminder could not be updated.", "REMINDER_UPDATE_FAILED"),
+            Map.entry("Photo id is required.", "PHOTO_ID_REQUIRED"),
+            Map.entry("Photo id must be positive.", "PHOTO_ID_INVALID"),
+            Map.entry("Photo id must be a number.", "PHOTO_ID_INVALID"),
+            Map.entry("Photo file is required.", "PHOTO_FILE_REQUIRED"),
+            Map.entry("Photo file must be WebP.", "PHOTO_FILE_TYPE_INVALID"),
+            Map.entry("Photo file must not exceed 2 MB.", "PHOTO_FILE_TOO_LARGE"),
+            Map.entry("Photo dimensions must be 1200 by 900.", "PHOTO_DIMENSIONS_INVALID"),
+            Map.entry("Photo file is invalid.", "PHOTO_FILE_INVALID"),
+            Map.entry("Photo was not found.", "PHOTO_NOT_FOUND"),
+            Map.entry("Photo could not be stored.", "PHOTO_STORAGE_FAILED"),
+            Map.entry("Photo could not be created.", "PHOTO_CREATE_FAILED"),
+            Map.entry("Photo file is unavailable.", "PHOTO_FILE_UNAVAILABLE"));
 
     @ExceptionHandler(ResponseStatusException.class)
     public ResponseEntity<ApiErrorResponse> handleStatus(
@@ -110,6 +143,7 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiErrorResponse> handleTypeMismatch(
             MethodArgumentTypeMismatchException exception, HttpServletRequest request) {
         String message = switch (exception.getName()) {
+            case "photoId" -> "Photo id must be a number.";
             case "recordId" -> "Record id must be a number.";
             case "reminderId" -> "Reminder id must be a number.";
             case "version" -> request.getRequestURI().startsWith("/api/reminders")
@@ -124,6 +158,12 @@ public class GlobalExceptionHandler {
         };
         String code = ERROR_CODES.getOrDefault(message, "REQUEST_PARAMETER_INVALID");
         return build(HttpStatus.BAD_REQUEST, code, message, request);
+    }
+
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<ApiErrorResponse> handleUploadTooLarge(HttpServletRequest request) {
+        return build(HttpStatus.PAYLOAD_TOO_LARGE, "PHOTO_FILE_TOO_LARGE",
+                "Photo file must not exceed 2 MB.", request);
     }
 
     @ExceptionHandler(HttpRequestMethodNotSupportedException.class)

@@ -9,19 +9,24 @@ import org.apache.ibatis.annotations.Param;
 public interface PersonalRecordDao {
     int insertRecord(PersonalRecordDO record);
 
-    PersonalRecordDO selectActiveById(@Param("recordId") long recordId);
+    PersonalRecordDO selectActiveById(
+            @Param("userId") long userId,
+            @Param("recordId") long recordId);
 
     List<PersonalRecordDO> selectActivePage(
+            @Param("userId") long userId,
             @Param("recordType") String recordType,
             @Param("recallEnabled") Boolean recallEnabled,
             @Param("offset") int offset,
             @Param("limit") int limit);
 
     long countActive(
+            @Param("userId") long userId,
             @Param("recordType") String recordType,
             @Param("recallEnabled") Boolean recallEnabled);
 
     List<PersonalRecordActivityDO> selectDailyActivity(
+            @Param("userId") long userId,
             @Param("recordType") String recordType,
             @Param("startDate") LocalDate startDate,
             @Param("endDate") LocalDate endDate);
@@ -29,6 +34,7 @@ public interface PersonalRecordDao {
     int updateRecord(PersonalRecordDO record);
 
     int logicalDelete(
+            @Param("userId") long userId,
             @Param("recordId") long recordId,
             @Param("version") int version);
 }

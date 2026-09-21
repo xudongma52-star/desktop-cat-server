@@ -18,6 +18,13 @@ const connectionNotice = computed(() => auth.initializationFailed
   ? '暂时没有连接到后端，启动服务后就可以登录。'
   : '')
 
+const registerDestination = computed(() => ({
+  name: 'register',
+  query: typeof route.query.redirect === 'string'
+    ? { redirect: route.query.redirect }
+    : {},
+}))
+
 function destination(): string {
   const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/'
   return redirect.startsWith('/') && !redirect.startsWith('//') ? redirect : '/'
@@ -99,7 +106,7 @@ async function submit() {
 
     <template #footer>
       <span>第一次来到这里？</span>
-      <RouterLink to="/register">创建一个账号</RouterLink>
+      <RouterLink :to="registerDestination">创建一个账号</RouterLink>
     </template>
   </AuthLayout>
 </template>

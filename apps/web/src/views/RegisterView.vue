@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { describeAuthError } from '../api/auth'
 import AuthLayout from '../components/AuthLayout.vue'
 import { useAuthStore } from '../stores/auth'
 
 const router = useRouter()
+const route = useRoute()
 const auth = useAuthStore()
 const username = ref('')
 const password = ref('')
@@ -13,6 +14,18 @@ const confirmPassword = ref('')
 const showPassword = ref(false)
 const submitting = ref(false)
 const error = ref('')
+
+function destination(): string {
+  const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/'
+  return redirect.startsWith('/') && !redirect.startsWith('//') ? redirect : '/'
+}
+
+const loginDestination = {
+  name: 'login',
+  query: typeof route.query.redirect === 'string'
+    ? { redirect: route.query.redirect }
+    : {},
+}
 
 function validate(): string {
   const normalizedUsername = username.value.trim()
@@ -35,7 +48,7 @@ async function submit() {
   submitting.value = true
   try {
     await auth.register({ username: username.value, password: password.value })
-    await router.replace('/')
+    await router.replace(destination())
   } catch (caught) {
     error.value = describeAuthError(caught, '账号暂时没有创建成功，请稍后再试。')
   } finally {
@@ -111,7 +124,7 @@ async function submit() {
 
     <template #footer>
       <span>已经有账号了？</span>
-      <RouterLink to="/login">回到登录</RouterLink>
+      <RouterLink :to="loginDestination">回到登录</RouterLink>
     </template>
   </AuthLayout>
 </template>

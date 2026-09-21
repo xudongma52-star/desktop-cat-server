@@ -5,6 +5,7 @@ import java.time.LocalDate;
 
 public class EmotionDO {
     private Long emotionId;
+    private Long userId;
     private String content;
     private LocalDate recordDate;
     private Instant createdAt;
@@ -12,8 +13,10 @@ public class EmotionDO {
     public EmotionDO() {
     }
 
-    public EmotionDO(Long emotionId, String content, LocalDate recordDate, Instant createdAt) {
+    public EmotionDO(
+            Long emotionId, Long userId, String content, LocalDate recordDate, Instant createdAt) {
         this.emotionId = emotionId;
+        this.userId = userId;
         this.content = content;
         this.recordDate = recordDate;
         this.createdAt = createdAt;
@@ -25,6 +28,14 @@ public class EmotionDO {
 
     public void setEmotionId(Long emotionId) {
         this.emotionId = emotionId;
+    }
+
+    public Long getUserId() {
+        return userId;
+    }
+
+    public void setUserId(Long userId) {
+        this.userId = userId;
     }
 
     public String getContent() {

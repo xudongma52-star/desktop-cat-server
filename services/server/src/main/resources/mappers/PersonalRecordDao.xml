@@ -3,6 +3,7 @@
 <mapper namespace="com.desktopcat.server.record.dao.PersonalRecordDao">
   <sql id="activeRecordColumns">
     record_id,
+    user_id,
     record_type,
     title,
     content,
@@ -17,6 +18,7 @@
 
   <sql id="activeRecordSummaryColumns">
     record_id,
+    user_id,
     record_type,
     title,
     LEFT(REGEXP_REPLACE(BTRIM(content), '[[:space:]]+', ' ', 'g'), 161) AS content,
@@ -32,6 +34,7 @@
   <insert id="insertRecord" parameterType="com.desktopcat.server.record.dao.PersonalRecordDO"
           useGeneratedKeys="true" keyProperty="recordId" keyColumn="record_id">
     INSERT INTO personal_record (
+      user_id,
       record_type,
       title,
       content,
@@ -40,6 +43,7 @@
       recall_enabled,
       rag_enabled
     ) VALUES (
+      #{userId},
       #{recordType},
       #{title},
       #{content},
@@ -54,13 +58,15 @@
     SELECT <include refid="activeRecordColumns"/>
     FROM personal_record
     WHERE record_id = #{recordId}
+      AND user_id = #{userId}
       AND deleted_at IS NULL
   </select>
 
   <select id="selectActivePage" resultType="com.desktopcat.server.record.dao.PersonalRecordDO">
     SELECT <include refid="activeRecordSummaryColumns"/>
     FROM personal_record
-    WHERE deleted_at IS NULL
+    WHERE user_id = #{userId}
+      AND deleted_at IS NULL
     <if test="recordType != null">
       AND record_type = #{recordType}
     </if>
@@ -75,7 +81,8 @@
   <select id="countActive" resultType="long">
     SELECT COUNT(*)
     FROM personal_record
-    WHERE deleted_at IS NULL
+    WHERE user_id = #{userId}
+      AND deleted_at IS NULL
     <if test="recordType != null">
       AND record_type = #{recordType}
     </if>
@@ -89,7 +96,8 @@
     SELECT record_date,
            COUNT(*) AS record_count
     FROM personal_record
-    WHERE deleted_at IS NULL
+    WHERE user_id = #{userId}
+      AND deleted_at IS NULL
       AND record_type = #{recordType}
       AND record_date BETWEEN #{startDate} AND #{endDate}
     GROUP BY record_date
@@ -108,6 +116,7 @@
         version = version + 1,
         updated_at = CURRENT_TIMESTAMP
     WHERE record_id = #{recordId}
+      AND user_id = #{userId}
       AND version = #{version}
       AND deleted_at IS NULL
   </update>
@@ -118,6 +127,7 @@
         version = version + 1,
         updated_at = CURRENT_TIMESTAMP
     WHERE record_id = #{recordId}
+      AND user_id = #{userId}
       AND version = #{version}
       AND deleted_at IS NULL
   </update>

@@ -3,6 +3,7 @@ package com.desktopcat.server.identity;
 import static org.hamcrest.Matchers.matchesPattern;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -28,6 +29,7 @@ import org.springframework.security.authentication.dao.DaoAuthenticationProvider
 import org.springframework.security.crypto.factory.PasswordEncoderFactories;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
+import org.springframework.security.web.authentication.RememberMeServices;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
@@ -35,10 +37,12 @@ class AuthControllerTest {
     private final AppUserDao appUserDao = mock(AppUserDao.class);
     private final AtomicReference<AppUserDO> storedUser = new AtomicReference<>();
     private MockMvc mvc;
+    private RememberMeServices rememberMeServices;
 
     @BeforeEach
     void setUp() {
         storedUser.set(null);
+        rememberMeServices = mock(RememberMeServices.class);
         when(appUserDao.selectByUsername(any())).thenAnswer(invocation -> {
             String username = invocation.getArgument(0);
             AppUserDO user = storedUser.get();
@@ -65,7 +69,8 @@ class AuthControllerTest {
         mvc = MockMvcBuilders.standaloneSetup(new AuthController(
                         service,
                         new ProviderManager(authenticationProvider),
-                        new HttpSessionSecurityContextRepository()))
+                        new HttpSessionSecurityContextRepository(),
+                        rememberMeServices))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .addFilters(new RequestIdFilter())
                 .build();
@@ -85,6 +90,7 @@ class AuthControllerTest {
                 .andExpect(request().sessionAttribute(
                         HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY,
                         org.hamcrest.Matchers.notNullValue()));
+        verify(rememberMeServices).loginSuccess(any(), any(), any());
 
         mvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)

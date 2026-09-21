@@ -5,6 +5,7 @@ import type { SystemStatus } from '../api/system'
 import { ApiError, getCatProfile, updateCatName } from '../api/cat-profile'
 import type { CatProfile } from '../api/cat-profile'
 import ArticleRecallCarousel from '../components/ArticleRecallCarousel.vue'
+import PhotoCarousel from '../components/PhotoCarousel.vue'
 import WritingActivityHeatmap from '../components/WritingActivityHeatmap.vue'
 
 const checking = ref(false)
@@ -80,6 +81,7 @@ onMounted(() => {
           <div class="hero-actions">
             <RouterLink class="button prominent" to="/records/new">写下今天</RouterLink>
             <RouterLink class="button secondary" to="/records">翻翻以前</RouterLink>
+            <a class="button secondary" href="/downloads/desktop-cat-windows-x64-setup.exe" download>下载桌面猫</a>
           </div>
         </div>
         <div class="cat-card" aria-hidden="true">
@@ -90,6 +92,8 @@ onMounted(() => {
       </section>
 
       <WritingActivityHeatmap />
+
+      <PhotoCarousel />
 
       <ArticleRecallCarousel />
 

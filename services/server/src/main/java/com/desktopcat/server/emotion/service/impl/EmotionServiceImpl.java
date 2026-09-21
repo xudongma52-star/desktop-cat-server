@@ -32,7 +32,7 @@ public class EmotionServiceImpl implements EmotionService {
 
     @Override
     @Transactional
-    public EmotionDto create(EmotionCreateDto request) {
+    public EmotionDto create(long userId, EmotionCreateDto request) {
         if (request == null) {
             throw badRequest("Request body is required.");
         }
@@ -43,23 +43,24 @@ public class EmotionServiceImpl implements EmotionService {
         String content = request.content().strip();
         //获取当前 UTC 时间，Instant是java时间类型
         Instant now = Instant.now();
-        EmotionDO emotion = new EmotionDO(null, content, LocalDate.now(USER_ZONE), now);
+        EmotionDO emotion = new EmotionDO(null, userId, content, LocalDate.now(USER_ZONE), now);
         int insertedRows = emotionDao.insert(emotion);
         if (insertedRows != 1 || emotion.getEmotionId() == null) {
-            log.error("event=emotion_create_failed contentLength={}", codePointLength(content));
+            log.error("event=emotion_create_failed userId={} contentLength={}",
+                    userId, codePointLength(content));
             throw new ResponseStatusException(
                     HttpStatus.INTERNAL_SERVER_ERROR, "Emotion could not be created.");
         }
 
-        log.info("event=emotion_created emotionId={} recordDate={} contentLength={}",
-                emotion.getEmotionId(), emotion.getRecordDate(), codePointLength(content));
+        log.info("event=emotion_created userId={} emotionId={} recordDate={} contentLength={}",
+                userId, emotion.getEmotionId(), emotion.getRecordDate(), codePointLength(content));
         return toDto(emotion);
     }
 
     @Override
-    public List<EmotionDto> listByDate(LocalDate recordDate) {
+    public List<EmotionDto> listByDate(long userId, LocalDate recordDate) {
         LocalDate targetDate = recordDate == null ? LocalDate.now(USER_ZONE) : recordDate;
-        return emotionDao.selectByDate(targetDate).stream().map(this::toDto).toList();
+        return emotionDao.selectByDate(userId, targetDate).stream().map(this::toDto).toList();
     }
 
     private EmotionDto toDto(EmotionDO emotion) {

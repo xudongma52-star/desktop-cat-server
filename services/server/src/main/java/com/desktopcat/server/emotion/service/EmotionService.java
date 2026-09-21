@@ -6,7 +6,7 @@ import java.time.LocalDate;
 import java.util.List;
 
 public interface EmotionService {
-    EmotionDto create(EmotionCreateDto request);
+    EmotionDto create(long userId, EmotionCreateDto request);
 
-    List<EmotionDto> listByDate(LocalDate recordDate);
+    List<EmotionDto> listByDate(long userId, LocalDate recordDate);
 }

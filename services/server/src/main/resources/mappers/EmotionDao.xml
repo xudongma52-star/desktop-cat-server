@@ -3,10 +3,12 @@
 <mapper namespace="com.desktopcat.server.emotion.dao.EmotionDao">
   <insert id="insert" useGeneratedKeys="true" keyProperty="emotionId" keyColumn="emotion_id">
     INSERT INTO daily_emotion (
+      user_id,
       content,
       record_date,
       created_at
     ) VALUES (
+      #{userId},
       #{content},
       #{recordDate},
       #{createdAt}
@@ -15,11 +17,13 @@
 
   <select id="selectByDate" resultType="com.desktopcat.server.emotion.dao.EmotionDO">
     SELECT emotion_id,
+           user_id,
            content,
            record_date,
            created_at
     FROM daily_emotion
-    WHERE record_date = #{recordDate}
+    WHERE user_id = #{userId}
+      AND record_date = #{recordDate}
     ORDER BY created_at ASC, emotion_id ASC
   </select>
 </mapper>

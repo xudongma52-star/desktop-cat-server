@@ -24,6 +24,8 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.RememberMeServices;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.security.web.authentication.www.BasicAuthenticationFilter;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.security.web.context.SecurityContextRepository;
@@ -53,6 +55,8 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(
             HttpSecurity http,
             SecurityContextRepository securityContextRepository,
+            RememberMeServices rememberMeServices,
+            DesktopBearerTokenFilter desktopBearerTokenFilter,
             ObjectMapper objectMapper) throws Exception {
         CookieCsrfTokenRepository csrfTokenRepository = CookieCsrfTokenRepository.withHttpOnlyFalse();
         csrfTokenRepository.setCookieCustomizer(cookie -> cookie.path("/").sameSite("Lax"));
@@ -68,12 +72,23 @@ public class SecurityConfig {
                                 "/actuator/health").permitAll()
                         .requestMatchers(HttpMethod.POST,
                                 "/api/auth/register",
-                                "/api/auth/login").permitAll()
+                                "/api/auth/login",
+                                "/api/auth/desktop/exchange",
+                                "/api/auth/desktop/refresh",
+                                "/api/auth/desktop/revoke").permitAll()
                         .requestMatchers("/api/**").authenticated()
                         .anyRequest().permitAll())
                 .csrf(csrf -> csrf
                         .csrfTokenRepository(csrfTokenRepository)
-                        .csrfTokenRequestHandler(csrfRequestHandler))
+                        .csrfTokenRequestHandler(csrfRequestHandler)
+                        .ignoringRequestMatchers(
+                                "/api/auth/desktop/exchange",
+                                "/api/auth/desktop/refresh",
+                                "/api/auth/desktop/revoke")
+                        .ignoringRequestMatchers(request -> {
+                            String authorization = request.getHeader("Authorization");
+                            return authorization != null && authorization.startsWith("Bearer ");
+                        }))
                 .securityContext(context -> context
                         .securityContextRepository(securityContextRepository)
                         .requireExplicitSave(true))
@@ -97,6 +112,7 @@ public class SecurityConfig {
                                 "Access is denied.")))
                 .formLogin(form -> form.disable())
                 .httpBasic(basic -> basic.disable())
+                .rememberMe(remember -> remember.rememberMeServices(rememberMeServices))
                 .logout(logout -> logout
                         .logoutUrl("/api/auth/logout")
                         .addLogoutHandler((request, response, authentication) ->
@@ -104,6 +120,7 @@ public class SecurityConfig {
                         .deleteCookies("JSESSIONID")
                         .logoutSuccessHandler((request, response, authentication) ->
                                 response.setStatus(HttpStatus.NO_CONTENT.value())))
+                .addFilterBefore(desktopBearerTokenFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterAfter(new CsrfCookieFilter(), BasicAuthenticationFilter.class);
 
         return http.build();

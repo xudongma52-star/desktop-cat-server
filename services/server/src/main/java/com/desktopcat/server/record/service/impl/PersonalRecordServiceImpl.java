@@ -61,10 +61,11 @@ public class PersonalRecordServiceImpl implements PersonalRecordService {
     */
     @Override
     @Transactional
-    public PersonalRecordDetailDto createRecord(PersonalRecordCreateDto request) {
+    public PersonalRecordDetailDto createRecord(long userId, PersonalRecordCreateDto request) {
         // 创建时不接收客户端版本号；主键和初始版本完全由服务端控制。
         PersonalRecordDO record = validateAndNormalizeRecord(toDataObject(request), false);
         record.setRecordId(null);
+        record.setUserId(userId);
         record.setVersion(0);
 
         int insertedRows = personalRecordDao.insertRecord(record);
@@ -78,10 +79,10 @@ public class PersonalRecordServiceImpl implements PersonalRecordService {
         }
 
         // 重新查询一次，保证返回数据库最终保存的默认值和审计时间。
-        PersonalRecordDO created = findActiveRecord(record.getRecordId());
-        log.info("event=personal_record_created recordId={} recordType={} version={} contentLength={} "
+        PersonalRecordDO created = findActiveRecord(userId, record.getRecordId());
+        log.info("event=personal_record_created userId={} recordId={} recordType={} version={} contentLength={} "
                         + "recallEnabled={} ragEnabled={}",
-                created.getRecordId(), created.getRecordType(), created.getVersion(),
+                userId, created.getRecordId(), created.getRecordType(), created.getVersion(),
                 codePointLength(created.getContent()), created.getRecallEnabled(), created.getRagEnabled());
         return toDetailDto(created);
     }
@@ -90,7 +91,8 @@ public class PersonalRecordServiceImpl implements PersonalRecordService {
      * 分页查询未删除文章，可按文章类型筛选。
      */
     @Override
-    public PersonalRecordPageDto listRecords(Integer page, Integer pageSize, String recordType) {
+    public PersonalRecordPageDto listRecords(
+            long userId, Integer page, Integer pageSize, String recordType) {
         int normalizedPage = validatePage(page);
         int normalizedPageSize = validatePageSize(pageSize);
         String normalizedRecordType = normalizeOptionalRecordType(recordType);
@@ -103,9 +105,10 @@ public class PersonalRecordServiceImpl implements PersonalRecordService {
         }
 
         // 计数和分页查询必须使用相同筛选条件，否则 total 会与 items 不一致。
-        long total = personalRecordDao.countActive(normalizedRecordType, null);
+        long total = personalRecordDao.countActive(userId, normalizedRecordType, null);
         List<PersonalRecordListItemDto> items = personalRecordDao.selectActivePage(
-                        normalizedRecordType, null, (int) offsetValue, normalizedPageSize).stream()
+                        userId, normalizedRecordType, null,
+                        (int) offsetValue, normalizedPageSize).stream()
                 .map(this::toListItem)
                 .toList();
 
@@ -122,7 +125,7 @@ public class PersonalRecordServiceImpl implements PersonalRecordService {
      */
     @Override
     public PersonalRecordActivityDto getActivity(
-            LocalDate startDate, LocalDate endDate, String recordType) {
+            long userId, LocalDate startDate, LocalDate endDate, String recordType) {
         if (startDate == null) {
             throw badRequest("Activity start date is required.");
         }
@@ -140,7 +143,7 @@ public class PersonalRecordServiceImpl implements PersonalRecordService {
 
         String normalizedRecordType = normalizeRequiredRecordType(recordType);
         List<PersonalRecordActivityDayDto> days = personalRecordDao
-                .selectDailyActivity(normalizedRecordType, startDate, endDate).stream()
+                .selectDailyActivity(userId, normalizedRecordType, startDate, endDate).stream()
                 .map(this::toActivityDayDto)
                 .toList();
         long totalRecords = days.stream()
@@ -154,8 +157,8 @@ public class PersonalRecordServiceImpl implements PersonalRecordService {
      * 按主键查询一篇未删除文章。
     */
     @Override
-    public PersonalRecordDetailDto getRecord(Long recordId) {
-        return toDetailDto(findActiveRecord(validateRecordId(recordId)));
+    public PersonalRecordDetailDto getRecord(long userId, Long recordId) {
+        return toDetailDto(findActiveRecord(userId, validateRecordId(recordId)));
     }
 
     /**
@@ -163,17 +166,19 @@ public class PersonalRecordServiceImpl implements PersonalRecordService {
     */
     @Override
     @Transactional
-    public PersonalRecordDetailDto updateRecord(Long recordId, PersonalRecordUpdateDto request) {
+    public PersonalRecordDetailDto updateRecord(
+            long userId, Long recordId, PersonalRecordUpdateDto request) {
         long normalizedRecordId = validateRecordId(recordId);
         // 修改操作必须携带客户端最近一次读取到的 version。
         PersonalRecordDO record = validateAndNormalizeRecord(toDataObject(request), true);
-        PersonalRecordDO current = findActiveRecord(normalizedRecordId);
+        PersonalRecordDO current = findActiveRecord(userId, normalizedRecordId);
         record.setRecordId(normalizedRecordId);
+        record.setUserId(userId);
 
         int updatedRows = personalRecordDao.updateRecord(record);
         if (updatedRows == 0) {
             // 更新行数为 0 可能是数据已删除，也可能是 version 已变化，需要分别提示。
-            PersonalRecordDO latest = personalRecordDao.selectActiveById(normalizedRecordId);
+            PersonalRecordDO latest = personalRecordDao.selectActiveById(userId, normalizedRecordId);
             if (latest == null) {
                 log.warn("event=personal_record_not_found recordId={}", normalizedRecordId);
                 throw notFound();
@@ -184,10 +189,11 @@ public class PersonalRecordServiceImpl implements PersonalRecordService {
         }
 
         // DAO 会让 version 自增，因此重新读取后再把最新版本返回给客户端。
-        PersonalRecordDO updated = findActiveRecord(normalizedRecordId);
-        log.info("event=personal_record_updated recordId={} recordType={} versionBefore={} versionAfter={} "
+        PersonalRecordDO updated = findActiveRecord(userId, normalizedRecordId);
+        log.info("event=personal_record_updated userId={} recordId={} recordType={} versionBefore={} versionAfter={} "
                         + "contentLength={} recallEnabled={} ragEnabled={}",
-                updated.getRecordId(), updated.getRecordType(), current.getVersion(), updated.getVersion(),
+                userId, updated.getRecordId(), updated.getRecordType(),
+                current.getVersion(), updated.getVersion(),
                 codePointLength(updated.getContent()), updated.getRecallEnabled(), updated.getRagEnabled());
         return toDetailDto(updated);
     }
@@ -197,15 +203,15 @@ public class PersonalRecordServiceImpl implements PersonalRecordService {
      */
     @Override
     @Transactional
-    public void deleteRecord(Long recordId, Integer version) {
+    public void deleteRecord(long userId, Long recordId, Integer version) {
         long normalizedRecordId = validateRecordId(recordId);
         int normalizedVersion = validateVersion(version);
-        PersonalRecordDO current = findActiveRecord(normalizedRecordId);
+        PersonalRecordDO current = findActiveRecord(userId, normalizedRecordId);
 
-        int deletedRows = personalRecordDao.logicalDelete(normalizedRecordId, normalizedVersion);
+        int deletedRows = personalRecordDao.logicalDelete(userId, normalizedRecordId, normalizedVersion);
         if (deletedRows == 0) {
             // 与更新相同，区分“文章不存在”和“版本冲突”两种失败原因。
-            PersonalRecordDO latest = personalRecordDao.selectActiveById(normalizedRecordId);
+            PersonalRecordDO latest = personalRecordDao.selectActiveById(userId, normalizedRecordId);
             if (latest == null) {
                 log.warn("event=personal_record_not_found recordId={}", normalizedRecordId);
                 throw notFound();
@@ -215,18 +221,19 @@ public class PersonalRecordServiceImpl implements PersonalRecordService {
             throw versionConflict();
         }
 
-        log.info("event=personal_record_deleted recordId={} recordType={} versionBefore={}",
-                normalizedRecordId, current.getRecordType(), current.getVersion());
+        log.info("event=personal_record_deleted userId={} recordId={} recordType={} versionBefore={}",
+                userId, normalizedRecordId, current.getRecordType(), current.getVersion());
     }
 
     /**
      * 查询允许进入温馨回忆轮播的文章，并转换为轮播需要的精简数据。
      */
     @Override
-    public List<PersonalRecordRecallDto> listRecalls(Integer limit) {
+    public List<PersonalRecordRecallDto> listRecalls(long userId, Integer limit) {
         int normalizedLimit = validateRecallLimit(limit);
         // 复用通用分页查询：不限制文章类型，只筛选 recall_enabled = true。
-        return personalRecordDao.selectActivePage(null, true, 0, normalizedLimit).stream()
+        return personalRecordDao.selectActivePage(
+                        userId, null, true, 0, normalizedLimit).stream()
                 .map(record -> new PersonalRecordRecallDto(
                         record.getRecordId(),
                         record.getRecordType(),
@@ -286,7 +293,7 @@ public class PersonalRecordServiceImpl implements PersonalRecordService {
             return null;
         }
         return new PersonalRecordDO(
-                null, request.recordType(), request.title(), request.content(),
+                null, null, request.recordType(), request.title(), request.content(),
                 request.recordDate(), request.mood(), request.recallEnabled(), request.ragEnabled(),
                 null, null, null);
     }
@@ -297,7 +304,7 @@ public class PersonalRecordServiceImpl implements PersonalRecordService {
             return null;
         }
         return new PersonalRecordDO(
-                null, request.recordType(), request.title(), request.content(),
+                null, null, request.recordType(), request.title(), request.content(),
                 request.recordDate(), request.mood(), request.recallEnabled(), request.ragEnabled(),
                 request.version(), null, null);
     }
@@ -406,12 +413,12 @@ public class PersonalRecordServiceImpl implements PersonalRecordService {
     /**
      * 集中查询未删除文章，并把“查不到”统一转换为 404。
      */
-    private PersonalRecordDO findActiveRecord(long recordId) {
-        PersonalRecordDO record = personalRecordDao.selectActiveById(recordId);
+    private PersonalRecordDO findActiveRecord(long userId, long recordId) {
+        PersonalRecordDO record = personalRecordDao.selectActiveById(userId, recordId);
         if (record != null) {
             return record;
         }
-        log.warn("event=personal_record_not_found recordId={}", recordId);
+        log.warn("event=personal_record_not_found userId={} recordId={}", userId, recordId);
         throw notFound();
     }
 

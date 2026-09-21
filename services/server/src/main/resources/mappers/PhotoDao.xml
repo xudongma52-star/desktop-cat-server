@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.desktopcat.server.photo.dao.PhotoDao">
+  <sql id="photoColumns">
+    photo_id, user_id, storage_key, created_at, deleted_at
+  </sql>
+
+  <insert id="insertPhoto"
+          parameterType="com.desktopcat.server.photo.dao.PhotoDO"
+          useGeneratedKeys="true"
+          keyProperty="photoId"
+          keyColumn="photo_id">
+    INSERT INTO photo (user_id, storage_key)
+    VALUES (#{userId}, #{storageKey})
+  </insert>
+
+  <select id="selectActiveByUserId"
+          resultType="com.desktopcat.server.photo.dao.PhotoDO">
+    SELECT <include refid="photoColumns"/>
+    FROM photo
+    WHERE user_id = #{userId}
+      AND deleted_at IS NULL
+    ORDER BY created_at DESC, photo_id DESC
+  </select>
+
+  <select id="selectActiveByIdAndUserId"
+          resultType="com.desktopcat.server.photo.dao.PhotoDO">
+    SELECT <include refid="photoColumns"/>
+    FROM photo
+    WHERE photo_id = #{photoId}
+      AND user_id = #{userId}
+      AND deleted_at IS NULL
+  </select>
+
+  <update id="logicalDelete">
+    UPDATE photo
+    SET deleted_at = CURRENT_TIMESTAMP
+    WHERE photo_id = #{photoId}
+      AND user_id = #{userId}
+      AND deleted_at IS NULL
+  </update>
+</mapper>

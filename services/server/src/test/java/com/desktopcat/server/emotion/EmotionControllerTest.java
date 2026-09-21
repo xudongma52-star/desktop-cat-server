@@ -2,6 +2,7 @@ package com.desktopcat.server.emotion;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -12,6 +13,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.desktopcat.server.emotion.controller.EmotionController;
+import com.desktopcat.server.identity.application.CurrentUserService;
 import com.desktopcat.server.emotion.dao.EmotionDao;
 import com.desktopcat.server.emotion.dao.EmotionDO;
 import com.desktopcat.server.emotion.service.EmotionService;
@@ -30,7 +32,9 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 class EmotionControllerTest {
+    private static final long USER_ID = 1L;
     private final EmotionDao emotionDao = mock(EmotionDao.class);
+    private final CurrentUserService currentUserService = mock(CurrentUserService.class);
     private MockMvc mvc;
 
     @BeforeEach
@@ -42,7 +46,9 @@ class EmotionControllerTest {
         }).when(emotionDao).insert(any(EmotionDO.class));
 
         EmotionService service = new EmotionServiceImpl(emotionDao);
-        mvc = MockMvcBuilders.standaloneSetup(new EmotionController(service))
+        when(currentUserService.requireUserId(nullable(String.class))).thenReturn(USER_ID);
+        mvc = MockMvcBuilders.standaloneSetup(
+                        new EmotionController(service, currentUserService))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .addFilters(new RequestIdFilter())
                 .build();
@@ -69,21 +75,24 @@ class EmotionControllerTest {
         assertEquals(
                 LocalDate.now(ZoneId.of("Asia/Shanghai")),
                 emotionCaptor.getValue().getRecordDate());
+        assertEquals(USER_ID, emotionCaptor.getValue().getUserId());
     }
 
     @Test
     void listsEmotionsInTimeOrderForTheRequestedDate() throws Exception {
         LocalDate date = LocalDate.of(2026, 9, 16);
-        when(emotionDao.selectByDate(date)).thenReturn(List.of(
-                new EmotionDO(1L, "上午有点困。", date, Instant.parse("2026-09-16T01:00:00Z")),
-                new EmotionDO(2L, "晚上轻松多了。", date, Instant.parse("2026-09-16T13:00:00Z"))));
+        when(emotionDao.selectByDate(USER_ID, date)).thenReturn(List.of(
+                new EmotionDO(1L, USER_ID, "上午有点困。", date,
+                        Instant.parse("2026-09-16T01:00:00Z")),
+                new EmotionDO(2L, USER_ID, "晚上轻松多了。", date,
+                        Instant.parse("2026-09-16T13:00:00Z"))));
 
         mvc.perform(get("/api/emotions?date=2026-09-16"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].emotionId").value(1))
                 .andExpect(jsonPath("$[1].emotionId").value(2));
 
-        verify(emotionDao).selectByDate(date);
+        verify(emotionDao).selectByDate(USER_ID, date);
     }
 
     @Test
