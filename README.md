@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/xudongma52-star/desktop-cat-server/actions/workflows/ci.yml/badge.svg)](https://github.com/xudongma52-star/desktop-cat-server/actions/workflows/ci.yml)
 
-Vue 3 + Electron + Spring Boot 3 + JDK 21，使用原生 MyBatis。当前已实现带登录注册的个人文章网站、年度写作足迹、文章温馨回忆轮播、每日情绪站、待办提醒，以及一个可独立运行的 Windows 桌面猫。
+Vue 3 + Electron + Spring Boot 3 + JDK 21 + Python 3.12，使用原生 MyBatis。当前已实现带登录注册的个人文章网站、年度写作足迹、文章与照片回忆轮播、每日情绪站、待办提醒、第一版个人知识检索，以及一个可独立运行的 Windows 桌面猫。
 
 ## 当前范围
 
@@ -14,17 +14,20 @@ Vue 3 + Electron + Spring Boot 3 + JDK 21，使用原生 MyBatis。当前已实�
 - 已建立 Electron 桌面端：透明无边框窗口、置顶显示、透明区域鼠标穿透、拖动、真实猫叫、活动状态、自由移动、主动陪伴对话、托盘显隐与退出、窗口位置记忆和 Windows 安装包。
 - 当前 Q 版黑猫根据自己的猫照片生成，保留纯黑毛、圆脸、厚爪与琥珀眼；多组透明 PNG 精灵图配合 CSS 表现发呆、睡觉、舔毛、玩耍、吃冻干、散步和奔跑七种活动。
 - 已完成 `cat_profile` 资料表，可在网页修改小猫名字，并由 Java 通过 SSE 通知 Electron 实时同步；桌面端保留离线缓存。
-- 已完成 `personal_record` 文章表和完整 CRUD：可管理日记、心得与实习笔记，按类型筛选和分页，并分别设置是否加入温馨回忆、是否允许未来进入 RAG。
+- 已完成 `personal_record` 文章表和完整 CRUD：可管理日记、心得与实习笔记，按类型筛选和分页，并分别设置是否加入温馨回忆、是否允许进入知识检索。
+- 文章和每日情绪均按当前登录用户隔离；历史数据迁移时会归入既有 `MaxCat` 账号，避免升级后成为无主数据。
 - 首页写作足迹按日期统计最近 365 天的日记篇数，显示 53 周热力图、累计篇数和写作天数；统计直接聚合现有 `personal_record` 数据，不建立冗余统计表。
 - 已完成 `daily_emotion` 每日情绪表：可从桌面小猫的单一文本框快速记录一句话，并在网站按日期追溯当天和过去的内容。创建日期始终由 Java 按上海时区当天生成，不能补写过去或预写明天；情绪碎片与文章分开保存，不要求选择情绪类型，也不触发即时 AI 回复。
 - 已完成 `reminder` 待办提醒表和网站管理页：可创建、修改、完成和删除一次性提醒，并查看今天或全部未完成事项。提醒变更通过 SSE 实时同步到网页和桌面猫，每 5 分钟低频校准一次；桌面猫每 5 秒在本地检查到期时间，断网时继续使用缓存，到点会出现并喵一声，可直接标记完成。
+- 已完成无 API Key 的第一版知识检索：Java 只读取当前用户最近 100 篇记录中主动开启 `rag_enabled` 的正文，Python FastAPI 使用中文字符级 TF-IDF、文本切片和余弦相似度返回最多 5 个相关片段，Vue `/knowledge` 页面展示相关度并可跳回原文。当前版本只返回检索结果，不生成大模型回答，也不保存向量索引。
 - 首页文章温馨回忆轮播会读取主动开启 `recall_enabled` 的记录，支持上一条、下一条、暂停和自动轮播；目前只包含文字文章。
-- 图片回忆轮播、重复提醒、RAG 实际检索、拖拽投喂冻干和开机自启尚未实现；相关开关或接入位置只作为后续扩展边界。
+- 首页照片回忆轮播按账号管理照片，支持 JPG、PNG、WebP 原图选择、4:3 拖动缩放裁剪、上传、删除、手动切换及每 3 秒自动轮播。浏览器统一导出 1200 × 900 WebP，服务端再次校验格式、尺寸和 2 MB 上限；数据库只保存元数据和相对存储键，图片文件写入可配置目录。
+- 大模型整理回答、持久化向量索引、重复提醒、拖拽投喂冻干和开机自启尚未实现；相关接入位置作为后续扩展边界。
 - 开发服务与 Redis 端口都只绑定本机地址，当前框架用于本地学习；正式发布前仍需补齐 HTTPS 与部署配置。
 
 ## 环境
 
-JDK 21、Node.js 22.12+（建议 24 LTS）、pnpm 11.19.0。后端使用 Maven Wrapper。
+JDK 21、Node.js 22.12+（建议 24 LTS）、pnpm 11.19.0、Python 3.12。后端使用 Maven Wrapper。
 
 如果你的终端找不到 `pnpm`，可把下方命令中的 `pnpm` 替换为 `npx.cmd --yes pnpm@11.19.0`，例如 `npx.cmd --yes pnpm@11.19.0 dev`。
 
@@ -56,6 +59,21 @@ cd D:\repository\services\server
 ```powershell
 cd D:\repository
 pnpm dev
+```
+
+第一次使用知识检索时，先创建 Python 虚拟环境并安装依赖：
+
+```powershell
+cd D:\repository\services\rag-service
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+```
+
+随后打开第三个终端启动知识检索服务：
+
+```powershell
+cd D:\repository
+pnpm dev:rag
 ```
 
 打开 [http://127.0.0.1:5173](http://127.0.0.1:5173)，首次使用时在注册页创建用户名和密码；注册成功后会自动登录并进入首页。已有账号可直接登录。启动任一服务的终端按 `Ctrl+C` 可停止该服务。
@@ -118,9 +136,13 @@ RecordEditorView.vue
 
 首页的 `WritingActivityHeatmap.vue` 通过 `GET /api/records/activity` 读取按日期聚合的日记篇数，`ArticleRecallCarousel.vue` 通过 `GET /api/records/recalls` 读取允许回忆展示的文章。Vite 代理只用于开发；构建生成的静态页面需要由正式反向代理把 `/api` 路径转发给后端。
 
+照片回忆由 `PhotoCarousel.vue` 在浏览器内完成选择、4:3 裁剪和 WebP 编码，再通过 `POST /api/carousel/photos` 上传。`PhotoServiceImpl` 负责当前用户校验与数据库事务，`PhotoStorageService` 负责文件校验和落盘；列表、内容读取和逻辑删除均同时限定当前用户，不能访问其他账号的照片。
+
 每日情绪的写入链路为 Electron 渲染进程 → preload 受限 API → Electron 主进程 → `POST /api/emotions` → Java 分层 → PostgreSQL。主进程负责网络请求，渲染进程不直接访问数据库。网站的 `/emotions` 页面通过 `GET /api/emotions` 读取当天内容。
 
 提醒的管理链路为 `ReminderView.vue` → `/api/reminders` → `ReminderController` → `ReminderService` 接口 → `ReminderServiceImpl` → `ReminderDao` + `ReminderDao.xml` → PostgreSQL。桌面端主进程读取 `scope=PENDING`，把未完成提醒缓存到用户目录并把到期事项发送给渲染进程；用户点击“我做完了”后由主进程调用完成接口。
+
+第一版知识检索链路为 `KnowledgeView.vue` → `POST /api/knowledge/retrieve` → Java 校验当前用户并复用文章分页和详情服务 → Python FastAPI 切片与计算相关度 → Java 补回可信的文章类型、标题和日期 → Vue 展示原文来源。Python 不连接业务数据库，也不接收登录凭据。
 
 主要接口如下：
 
@@ -141,6 +163,11 @@ RecordEditorView.vue
 | `PUT /api/records/{recordId}` | 按版本更新文章 |
 | `DELETE /api/records/{recordId}?version=` | 按版本逻辑删除文章 |
 | `GET /api/records/recalls?limit=10` | 查询允许展示的文章回忆 |
+| `POST /api/knowledge/retrieve` | 从当前用户允许检索的记录中返回相关原文片段 |
+| `POST /api/carousel/photos` | 上传一张 1200 × 900、最大 2 MB 的 WebP 轮播照片 |
+| `GET /api/carousel/photos` | 查询当前用户的照片列表 |
+| `GET /api/carousel/photos/{photoId}/content` | 读取当前用户的照片内容 |
+| `DELETE /api/carousel/photos/{photoId}` | 将当前用户的照片移出轮播 |
 | `POST /api/emotions` | 保存一条当天情绪 |
 | `GET /api/emotions?date=2026-09-16` | 按日期查询情绪；不传日期时查询今天 |
 | `POST /api/reminders` | 创建一次性提醒 |
@@ -154,10 +181,10 @@ RecordEditorView.vue
 ```text
 apps/web/                    Vue 前端
   src/api/                   认证与业务 HTTP 请求、CSRF 请求头处理
-  src/components/            登录场景、文章温馨回忆轮播等组件
+  src/components/            登录场景、文章与照片温馨回忆轮播等组件
   src/router/                页面路由
   src/stores/                Pinia 登录状态
-  src/views/                 登录、注册、首页、文章、当天内心及提醒管理页面
+  src/views/                 登录、注册、桌面授权、首页、文章、当天内心及提醒管理页面
 apps/desktop/                Electron 桌面猫
   src/main/                  窗口、托盘、位置保存和 IPC
   src/preload/               受限的渲染进程桥接 API
@@ -167,8 +194,9 @@ apps/desktop/                Electron 桌面猫
     src/assets/audio/        本地猫叫资源
   build/                     应用图标
 services/server/             Java 后端
-  src/main/java/             启动类及 identity、cat、record、emotion、reminder 等业务模块
-    .../identity/            账号、会话认证、CSRF 与安全配置
+  src/main/java/             启动类及 identity、cat、record、emotion、photo、reminder 等业务模块
+    .../identity/            账号、Web 会话、桌面设备授权、CSRF 与安全配置
+    .../photo/               照片元数据、文件存储及轮播接口
     .../record/controller/   个人文章 HTTP 接口
     .../record/dto/          Controller 与 Service 共用的传输对象
     .../record/service/      Service 接口与 impl 实现
@@ -176,6 +204,9 @@ services/server/             Java 后端
       dataobject/            personal_record 数据库映射对象
   src/main/resources/        配置、MyBatis XML 与 Flyway 迁移
   src/test/java/             后端集成测试
+services/rag-service/        Python FastAPI 知识检索服务
+  rag_service/               HTTP 接口、文本切片和 TF-IDF 检索
+  tests/                     Python 检索核心测试
 ```
 
 小猫资料、个人文章、每日情绪和待办提醒后端都按 `controller`、`service` 接口、`service.impl`、`dao` 分层。请求和返回对象放在各模块的 `dto` 包；数据库对象使用 `DO` 后缀，与对应的 `Dao` 接口放在同一 `dao` 包，仅由 `service.impl` 和 `dao` 使用。具体 SQL 由 `mappers` 下与 Dao 同名的 XML 实现，不建立 DAO Impl；迁移位于 `db/migration`。后续数据库访问继续复用已有 DAO 能力，并遵守新增 Mapper/SQL 的审批约定。
@@ -185,6 +216,7 @@ services/server/             Java 后端
 ```powershell
 cd D:\repository
 pnpm build
+pnpm test:rag
 pnpm typecheck:desktop
 pnpm build:desktop
 cd services\server
@@ -207,6 +239,10 @@ cd services\server
 
 2026-09-20 已验证：Spring Session 已连接 Docker Redis，Actuator 健康状态为 `UP`，Lettuce 客户端实际建立连接；Web 会话、桌面端两分钟授权码和 15 分钟 Access Token 均已改由 Redis 承载。Maven Wrapper 测试共 27 项通过。
 
+2026-09-21 已验证：桌面浏览器授权、账号数据隔离和照片回忆轮播已接入；网页生产构建、桌面端 Node 与 Vue 类型检查通过，Maven Wrapper 测试共 28 项通过。照片存储测试覆盖 WebP 格式、1200 × 900 尺寸、2 MB 上限及文件读写边界。
+
+2026-09-22 已验证：无 API Key 的第一版知识检索已接入 Vue、Java 和 Python；Python 单元测试与真实 HTTP 请求通过，中文问题可以返回相关原文及来源。Java 继续负责登录与数据隔离，Python 不直接连接 PostgreSQL。
+
 ## PostgreSQL 连接配置
 
 默认配置可直接连接当前本机数据库：
@@ -226,12 +262,13 @@ $env:DB_USERNAME = 'postgres'
 $env:DB_PASSWORD = '替换为本地数据库密码'
 $env:REDIS_HOST = '127.0.0.1'
 $env:REDIS_PORT = '6380'
+$env:PHOTO_STORAGE_ROOT = 'D:\repository\services\server\data'
 .\mvnw.cmd spring-boot:run
 ```
 
-当前本地 Redis 未启用认证并且只监听宿主机回环地址。若将 Redis 暴露到其他机器或部署到服务器，必须先由项目维护者定义 Redis 账号密码，再补充安全连接配置；不得把正式凭据提交到仓库。服务器部署时还必须通过环境变量提供真实数据库密码和稳定随机的 `AUTH_REMEMBER_ME_KEY`，HTTPS 部署同时设置 `AUTH_SECURE_COOKIES=true`。
+`PHOTO_STORAGE_ROOT` 可省略，默认使用后端工作目录下的 `./data`；该目录保存照片原文件，不应提交到 Git，部署和迁移时需要与 PostgreSQL 数据一起备份。当前本地 Redis 未启用认证并且只监听宿主机回环地址。若将 Redis 暴露到其他机器或部署到服务器，必须先由项目维护者定义 Redis 账号密码，再补充安全连接配置；不得把正式凭据提交到仓库。服务器部署时还必须通过环境变量提供真实数据库密码和稳定随机的 `AUTH_REMEMBER_ME_KEY`，HTTPS 部署同时设置 `AUTH_SECURE_COOKIES=true`。
 
-应用首次启动时，Flyway 会在目标数据库创建 `flyway_schema_history`、`cat_profile`、`personal_record`、`daily_emotion`、`reminder`、`app_user`、`auth_device` 和 `photo`；业务主键使用带含义的字段，不使用裸 `id`。V1 创建小猫资料，V2 创建文章记录，V3 创建每日情绪及日期时间索引，V4 创建待办提醒及有效提醒索引，V5 创建用户表及唯一用户名约束，V6 创建设备授权表及有效设备索引，V7 创建图片记录及回忆索引。
+应用首次启动时，Flyway 会在目标数据库创建 `flyway_schema_history`、`cat_profile`、`personal_record`、`daily_emotion`、`reminder`、`app_user`、`auth_device` 和 `photo`；业务主键使用带含义的字段，不使用裸 `id`。V1 创建小猫资料，V2 创建文章记录，V3 创建每日情绪及日期时间索引，V4 创建待办提醒及有效提醒索引，V5 创建用户表及唯一用户名约束，V6 创建设备授权表及有效设备索引，V7 创建图片记录及回忆索引，V8 为文章和每日情绪补充用户归属及按用户查询索引。
 
 需要临时使用不连接数据库的内存模式时：
 
@@ -245,8 +282,10 @@ $env:SPRING_PROFILES_ACTIVE = 'local'
 ## 常见问题
 
 - 后端启动失败：先检查 `java -version` 是 JDK 21，再确认 PostgreSQL 与 `desktop-cat-redis` 均已启动，并查看终端首个错误。
-- 页面连接失败：检查后端是否启动、8080 是否被占用。默认只需要启动前后端两个进程。
+- 页面连接失败：检查后端是否启动、8080 是否被占用。普通页面需要前后端两个进程，知识检索还需要 Python 服务。
+- 知识检索提示 Python 服务未启动：确认已经安装 Python 3.12、创建 `services/rag-service/.venv`，然后在项目根目录运行 `pnpm dev:rag`。
 - 页面一直停留在登录页：确认后端使用默认 `postgres` 配置启动、数据库迁移已完成、Redis 可返回 `PONG`，并检查浏览器是否允许 `127.0.0.1` 的 Cookie。
+- 照片上传失败：原图需为 JPG、PNG 或 WebP 且不超过 20 MB；网页裁剪后会生成 1200 × 900 WebP，最终文件必须不超过 2 MB。还应确认 `PHOTO_STORAGE_ROOT` 对后端进程可写。
 - 桌面猫没有弹出登录页：检查 `DESKTOP_CAT_WEB_URL` 是否指向可访问的 Web 地址；本地开发默认是 `http://127.0.0.1:5173`。
 - 写请求返回 403：刷新页面重新获取 CSRF Cookie；开发时应始终通过 `http://127.0.0.1:5173` 访问网页，避免混用 `localhost` 和 `127.0.0.1` 导致 Cookie 会话不一致。
 - Flyway 报 `relation personal_record already exists`：说明该表曾在 Flyway 之外手工创建，但 V2 尚未登记。先备份并核对数据，再让表结构与迁移历史恢复一致；不要直接修改已经提交的 V2 文件。

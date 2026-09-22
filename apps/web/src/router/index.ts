@@ -8,6 +8,7 @@ import ReminderView from '../views/ReminderView.vue'
 import LoginView from '../views/LoginView.vue'
 import RegisterView from '../views/RegisterView.vue'
 import DesktopConnectView from '../views/DesktopConnectView.vue'
+import KnowledgeView from '../views/KnowledgeView.vue'
 import { pinia } from '../stores'
 import { useAuthStore } from '../stores/auth'
 
@@ -23,6 +24,7 @@ export const router = createRouter({
     { path: '/records/new', name: 'record-create', component: RecordEditorView, meta: { requiresAuth: true } },
     { path: '/records/:recordId', name: 'record-detail', component: RecordDetailView, meta: { requiresAuth: true } },
     { path: '/records/:recordId/edit', name: 'record-edit', component: RecordEditorView, meta: { requiresAuth: true } },
+    { path: '/knowledge', name: 'knowledge', component: KnowledgeView, meta: { requiresAuth: true } },
     { path: '/emotions', name: 'emotions', component: EmotionDayView, meta: { requiresAuth: true } },
     { path: '/reminders', name: 'reminders', component: ReminderView, meta: { requiresAuth: true } },
     { path: '/:pathMatch(.*)*', redirect: '/' },

@@ -32,6 +32,7 @@ async function logout() {
       <nav class="site-nav" aria-label="主要导航">
         <RouterLink to="/">首页</RouterLink>
         <RouterLink to="/records">我的记录</RouterLink>
+        <RouterLink to="/knowledge">知识库</RouterLink>
         <RouterLink to="/emotions">今天的内心</RouterLink>
         <RouterLink to="/reminders">提醒</RouterLink>
         <RouterLink class="nav-action" to="/records/new">写下今天</RouterLink>

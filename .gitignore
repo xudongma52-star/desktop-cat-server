@@ -4,6 +4,9 @@ out/
 release/
 @desktop-catdesktop/
 target/
+__pycache__/
+.pytest_cache/
+.venv/
 .pnpm-store/
 .m2/
 .logs/

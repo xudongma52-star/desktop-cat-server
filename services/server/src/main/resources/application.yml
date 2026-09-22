@@ -41,3 +41,6 @@ desktop-cat:
   photo:
     # 数据库只保存相对路径；服务器迁移时可通过环境变量切换实际存储目录。
     storage-root: ${PHOTO_STORAGE_ROOT:./data}
+  rag:
+    # Java 保留登录与数据权限，Python 服务只接收已经过用户隔离的候选正文。
+    service-url: ${RAG_SERVICE_URL:http://127.0.0.1:8090}
