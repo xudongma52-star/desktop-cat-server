@@ -15,6 +15,7 @@ __pycache__/
 .env
 .env.local
 .env.*.local
+deploy/.env
 *.log
 services/server/data/
 depl/

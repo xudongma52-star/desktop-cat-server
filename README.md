@@ -23,7 +23,7 @@ Vue 3 + Electron + Spring Boot 3 + JDK 21 + Python 3.12，使用原生 MyBatis�
 - 首页文章温馨回忆轮播会读取主动开启 `recall_enabled` 的记录，支持上一条、下一条、暂停和自动轮播；目前只包含文字文章。
 - 首页照片回忆轮播按账号管理照片，支持 JPG、PNG、WebP 原图选择、4:3 拖动缩放裁剪、上传、删除、手动切换及每 3 秒自动轮播。浏览器统一导出 1200 × 900 WebP，服务端再次校验格式、尺寸和 2 MB 上限；数据库只保存元数据和相对存储键，图片文件写入可配置目录。
 - 大模型整理回答、持久化向量索引、重复提醒、拖拽投喂冻干和开机自启尚未实现；相关接入位置作为后续扩展边界。
-- 开发服务与 Redis 端口都只绑定本机地址，当前框架用于本地学习；正式发布前仍需补齐 HTTPS 与部署配置。
+- 生产环境已使用 Docker Compose 运行 PostgreSQL、Redis、Java、Python RAG 和 Nginx，并通过 HTTPS 发布；除 Nginx 的 80/443 外，其余服务只映射到服务器回环地址。
 
 ## 环境
 
@@ -79,6 +79,12 @@ pnpm dev:rag
 打开 [http://127.0.0.1:5173](http://127.0.0.1:5173)，首次使用时在注册页创建用户名和密码；注册成功后会自动登录并进入首页。已有账号可直接登录。启动任一服务的终端按 `Ctrl+C` 可停止该服务。
 
 无需登录即可访问：[认证状态](http://127.0.0.1:8080/api/auth/status)、[运行状态](http://127.0.0.1:8080/api/system/status)和[健康检查](http://127.0.0.1:8080/actuator/health)。小猫资料、文章、情绪、提醒和 SSE 等业务接口需要先建立登录会话。请求字段、响应示例和错误码见 [接口文档](./接口文档.md)。
+
+## Docker 生产部署
+
+生产环境的 Compose 配置位于 [`deploy`](./deploy)，包含 PostgreSQL 16、Redis 7、Java 21、Python 3.12 RAG 和 Nginx。真实密码只放在服务器的 `deploy/.env`，不会进入 Git。部署目录、健康检查、日志与证书挂载约定见 [Docker 部署说明](./deploy/README.md)。
+
+线上地址：[https://maxmeme.cn](https://maxmeme.cn)。
 
 单独开发桌面猫：
 

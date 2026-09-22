@@ -1,0 +1,140 @@
+name: desktop-cat
+
+services:
+  postgres:
+    image: public.ecr.aws/docker/library/postgres:16-alpine
+    container_name: desktop-cat-postgres
+    restart: unless-stopped
+    shm_size: 128mb
+    environment:
+      POSTGRES_DB: desktop_cat
+      POSTGRES_USER: desktop_cat
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U desktop_cat -d desktop_cat"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks: [app]
+    logging: &default-logging
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  redis:
+    image: public.ecr.aws/docker/library/redis:7-alpine
+    container_name: desktop-cat-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--save", "60", "1"]
+    volumes:
+      - redis_data:/data
+    ports:
+      - "127.0.0.1:6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [app]
+    logging: *default-logging
+
+  rag:
+    build:
+      context: ../services/rag-service
+      dockerfile: ../../deploy/rag/Dockerfile
+    image: desktop-cat-rag:0.1.0
+    container_name: desktop-cat-rag
+    restart: unless-stopped
+    init: true
+    ports:
+      - "127.0.0.1:8090:8090"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8090/health', timeout=2)"
+      interval: 10s
+      timeout: 3s
+      retries: 12
+    networks: [app]
+    logging: *default-logging
+
+  backend:
+    image: public.ecr.aws/docker/library/eclipse-temurin:21-jre-alpine
+    container_name: desktop-cat-server
+    restart: unless-stopped
+    init: true
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rag:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: postgres
+      SERVER_ADDRESS: 0.0.0.0
+      SERVER_FORWARD_HEADERS_STRATEGY: framework
+      DB_URL: jdbc:postgresql://postgres:5432/desktop_cat
+      DB_USERNAME: desktop_cat
+      DB_PASSWORD: ${DB_PASSWORD}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      RAG_SERVICE_URL: http://rag:8090
+      AUTH_REMEMBER_ME_KEY: ${AUTH_REMEMBER_ME_KEY}
+      AUTH_SECURE_COOKIES: "true"
+      PHOTO_STORAGE_ROOT: /app/data
+      JAVA_TOOL_OPTIONS: -Xms128m -Xmx512m -XX:MaxMetaspaceSize=192m
+    working_dir: /app
+    volumes:
+      - ../services/server/target/desktop-cat-server-0.1.0-SNAPSHOT.jar:/app/desktop-cat-server.jar:ro
+      - /opt/desktop-cat/data:/app/data
+    command: ["java", "-jar", "/app/desktop-cat-server.jar"]
+    ports:
+      - "127.0.0.1:8080:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/actuator/health >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 20s
+    networks: [app]
+    logging: *default-logging
+
+  nginx:
+    image: public.ecr.aws/docker/library/nginx:1.27-alpine
+    container_name: desktop-cat-nginx
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - /www/wwwroot/maxmeme.cn:/usr/share/nginx/html:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+    ports:
+      - "80:80"
+      - "443:443"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/container-health >/dev/null"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+    networks: [app]
+    logging: *default-logging
+
+networks:
+  app:
+    name: desktop-cat-network
+
+volumes:
+  postgres_data:
+    name: desktop-cat-postgres-data
+  redis_data:
+    name: desktop-cat-redis-data
