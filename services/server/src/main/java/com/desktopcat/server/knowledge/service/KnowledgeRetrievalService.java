@@ -59,7 +59,8 @@ public class KnowledgeRetrievalService {
 
         boolean candidateLimitReached = page.total() > MAX_CANDIDATE_RECORDS;
         if (sourceRecords.isEmpty()) {
-            return new KnowledgeSearchResultDto(0, candidateLimitReached, List.of());
+            return new KnowledgeSearchResultDto(
+                    0, candidateLimitReached, null, false, List.of());
         }
 
         List<RagDocumentDto> documents = sourceRecords.values().stream()
@@ -76,7 +77,14 @@ public class KnowledgeRetrievalService {
                 .filter(java.util.Objects::nonNull)
                 .toList();
         return new KnowledgeSearchResultDto(
-                sourceRecords.size(), candidateLimitReached, List.copyOf(matches));
+                sourceRecords.size(),
+                candidateLimitReached,
+                normalizeAnswer(response.answer(), response.answerGenerated(), matches),
+                response.answerGenerated()
+                        && response.answer() != null
+                        && !response.answer().isBlank()
+                        && !matches.isEmpty(),
+                List.copyOf(matches));
     }
 
     private String validateQuestion(KnowledgeRetrieveRequestDto request) {
@@ -114,6 +122,14 @@ public class KnowledgeRetrievalService {
                 match.content(),
                 source.recordDate(),
                 normalizedScore);
+    }
+
+    private String normalizeAnswer(
+            String answer, boolean answerGenerated, List<KnowledgeMatchDto> matches) {
+        if (!answerGenerated || answer == null || answer.isBlank() || matches.isEmpty()) {
+            return null;
+        }
+        return answer.trim();
     }
 
     private ResponseStatusException badRequest(String message) {

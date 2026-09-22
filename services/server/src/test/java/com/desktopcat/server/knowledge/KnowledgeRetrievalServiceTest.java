@@ -47,7 +47,9 @@ class KnowledgeRetrievalServiceTest {
         when(ragServiceClient.retrieve(any())).thenReturn(
                 new RagRetrieveResponseDto(List.of(
                         new RagMatchDto(1L, "散步以后，我轻松了许多。", 0.72),
-                        new RagMatchDto(999L, "不可信来源", 0.99))));
+                        new RagMatchDto(999L, "不可信来源", 0.99)),
+                        "你以前会通过散步放松。[1]",
+                        true));
 
         var result = service.retrieve(7L, new KnowledgeRetrieveRequestDto(" 如何放松？ "));
 
@@ -56,6 +58,8 @@ class KnowledgeRetrievalServiceTest {
         assertThat(result.matches().getFirst().recordId()).isEqualTo(1L);
         assertThat(result.matches().getFirst().recordType()).isEqualTo("DIARY");
         assertThat(result.matches().getFirst().score()).isEqualTo(0.72);
+        assertThat(result.answer()).isEqualTo("你以前会通过散步放松。[1]");
+        assertThat(result.answerGenerated()).isTrue();
 
         ArgumentCaptor<RagRetrieveRequestDto> requestCaptor =
                 ArgumentCaptor.forClass(RagRetrieveRequestDto.class);
@@ -75,6 +79,8 @@ class KnowledgeRetrievalServiceTest {
 
         assertThat(result.searchableRecordCount()).isZero();
         assertThat(result.matches()).isEmpty();
+        assertThat(result.answer()).isNull();
+        assertThat(result.answerGenerated()).isFalse();
         verify(ragServiceClient, never()).retrieve(any());
     }
 

@@ -48,9 +48,9 @@ function scoreLabel(score: number): string {
       <div>
         <p class="eyebrow">MY KNOWLEDGE</p>
         <h1>从写过的话里，找回当时的自己。</h1>
-        <p>第一版会寻找与你的问题最相关的原文片段，并保留每一处来源。</p>
+        <p>从你的原文中寻找依据，再由小猫整理回答，并保留每一处来源。</p>
       </div>
-      <span class="knowledge-version">检索版 · 暂无大模型</span>
+      <span class="knowledge-version">豆包回答 · 原文可追溯</span>
     </section>
 
     <section class="knowledge-search-panel" aria-labelledby="knowledge-search-title">
@@ -99,9 +99,20 @@ function scoreLabel(score: number): string {
         第一版优先检索最近 100 篇记录，更早的内容会在后续索引版本中加入。
       </p>
 
+      <article v-if="result.answerGenerated && result.answer" class="knowledge-answer">
+        <p class="eyebrow">CAT'S ANSWER</p>
+        <h3>小猫从记录里找到了这些</h3>
+        <p>{{ result.answer }}</p>
+      </article>
+
+      <p v-else-if="result.matches.length" class="knowledge-limit-note">
+        回答模型暂时没有响应，先为你保留本次找到的原文片段。
+      </p>
+
       <div v-if="result.matches.length" class="knowledge-match-list">
-        <article v-for="match in result.matches" :key="`${match.recordId}-${match.content}`" class="knowledge-match-card">
+        <article v-for="(match, index) in result.matches" :key="`${match.recordId}-${match.content}`" class="knowledge-match-card">
           <div class="knowledge-match-meta">
+            <span>来源 {{ index + 1 }}</span>
             <span class="type-chip">{{ recordTypeLabels[match.recordType] }}</span>
             <time :datetime="match.recordDate">{{ formatRecordDate(match.recordDate) }}</time>
             <span class="knowledge-score">{{ scoreLabel(match.score) }}</span>

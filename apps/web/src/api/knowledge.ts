@@ -13,6 +13,8 @@ export interface KnowledgeMatch {
 export interface KnowledgeSearchResult {
   searchableRecordCount: number
   candidateLimitReached: boolean
+  answer: string | null
+  answerGenerated: boolean
   matches: KnowledgeMatch[]
 }
 

@@ -488,6 +488,9 @@ input:focus, textarea:focus, select:focus { border-color: #81927b; outline: 3px 
 .knowledge-results-heading .eyebrow { margin-bottom: 7px; }
 .knowledge-results-heading > span { color: #899188; font-size: 10px; }
 .knowledge-limit-note { margin: 16px 0 0; padding: 10px 12px; border-radius: 9px; color: #846f4d; background: #f6f0e3; font-size: 11px; line-height: 1.65; }
+.knowledge-answer { margin-top: 21px; padding: 23px 24px; border: 1px solid #d7e0d2; border-radius: 16px; background: #f2f6ed; }
+.knowledge-answer h3 { margin: 7px 0 11px; }
+.knowledge-answer > p:last-child { margin: 0; color: #526359; font-family: Georgia, 'Microsoft YaHei', serif; font-size: 14px; line-height: 1.9; white-space: pre-wrap; }
 .knowledge-match-list { display: grid; gap: 13px; margin-top: 21px; }
 .knowledge-match-card { padding: 22px 23px; border: 1px solid #e3e6dc; border-radius: 15px; background: #fafbf7; }
 .knowledge-match-card h3 { margin-top: 15px; }

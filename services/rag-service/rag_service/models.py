@@ -33,3 +33,5 @@ class RagMatch(BaseModel):
 
 class RagRetrieveResponse(BaseModel):
     matches: list[RagMatch]
+    answer: str | None = None
+    answerGenerated: bool = False

@@ -12,7 +12,7 @@
 
 照片继续保存在 `/opt/desktop-cat/data`，网页及下载文件继续保存在 `/www/wwwroot/maxmeme.cn`，证书继续保存在 `/etc/letsencrypt`。PostgreSQL 和 Redis 使用 Docker 命名卷。
 
-把 `.env.example` 复制为 `.env` 并填写真实值。`.env` 不得提交到 Git。
+把 `.env.example` 复制为 `.env` 并填写数据库密码、Remember-Me 密钥和火山方舟 API Key。`.env` 不得提交到 Git。`ARK_MODEL` 默认使用 `doubao-seed-2-1-turbo-260628`；未提供 `ARK_API_KEY` 时仍可检索原文，只是不生成回答。
 
 ```bash
 cd /opt/desktop-cat/current/deploy
