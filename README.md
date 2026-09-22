@@ -289,7 +289,7 @@ $env:SPRING_PROFILES_ACTIVE = 'local'
 
 - 后端启动失败：先检查 `java -version` 是 JDK 21，再确认 PostgreSQL 与 `desktop-cat-redis` 均已启动，并查看终端首个错误。
 - 页面连接失败：检查后端是否启动、8080 是否被占用。普通页面需要前后端两个进程，知识检索还需要 Python 服务。
-- 知识检索提示 Python 服务未启动：确认已经安装 Python 3.12、创建 `services/rag-service/.venv`，然后在项目根目录运行 `pnpm dev:rag`。
+- 本地知识问答提示服务暂时不可用：确认已经安装 Python 3.12、创建 `services/rag-service/.venv`，并在项目根目录运行 `pnpm dev:rag`；需要生成回答时还要配置有效的 `ARK_API_KEY`。
 - 页面一直停留在登录页：确认后端使用默认 `postgres` 配置启动、数据库迁移已完成、Redis 可返回 `PONG`，并检查浏览器是否允许 `127.0.0.1` 的 Cookie。
 - 照片上传失败：原图需为 JPG、PNG 或 WebP 且不超过 20 MB；网页裁剪后会生成 1200 × 900 WebP，最终文件必须不超过 2 MB。还应确认 `PHOTO_STORAGE_ROOT` 对后端进程可写。
 - 桌面猫没有弹出登录页：检查 `DESKTOP_CAT_WEB_URL` 是否指向可访问的 Web 地址；本地开发默认是 `http://127.0.0.1:5173`。

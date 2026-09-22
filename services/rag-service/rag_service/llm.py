@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_ARK_URL = "https://ark.cn-beijing.volces.com/api/v3/chat/completions"
 DEFAULT_ARK_MODEL = "doubao-seed-2-1-turbo-260628"
 MAX_CONTEXT_CODE_POINTS = 8_000
+ARK_REQUEST_TIMEOUT_SECONDS = 110
 
 
 def generate_answer(question: str, matches: list[RagMatch]) -> str | None:
@@ -50,7 +51,7 @@ def generate_answer(question: str, matches: list[RagMatch]) -> str | None:
     )
 
     try:
-        with urllib.request.urlopen(request, timeout=30) as response:
+        with urllib.request.urlopen(request, timeout=ARK_REQUEST_TIMEOUT_SECONDS) as response:
             body = json.load(response)
         content = body["choices"][0]["message"]["content"]
         if isinstance(content, str) and content.strip():

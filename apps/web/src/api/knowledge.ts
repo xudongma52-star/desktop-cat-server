@@ -19,8 +19,16 @@ export interface KnowledgeSearchResult {
 }
 
 export async function retrieveKnowledge(question: string): Promise<KnowledgeSearchResult> {
-  return apiRequest<KnowledgeSearchResult>('/api/knowledge/retrieve', {
-    method: 'POST',
-    body: JSON.stringify({ question }),
-  })
+  const timeoutController = new AbortController()
+  const timeoutId = window.setTimeout(() => timeoutController.abort(), 130_000)
+
+  try {
+    return apiRequest<KnowledgeSearchResult>('/api/knowledge/retrieve', {
+      method: 'POST',
+      body: JSON.stringify({ question }),
+      signal: timeoutController.signal,
+    })
+  } finally {
+    window.clearTimeout(timeoutId)
+  }
 }

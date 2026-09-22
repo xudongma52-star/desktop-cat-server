@@ -23,7 +23,7 @@ async function search() {
     result.value = await retrieveKnowledge(normalizedQuestion)
   } catch (caught) {
     if (caught instanceof ApiError && caught.status === 503) {
-      error.value = '知识检索服务暂时没有启动，请先启动 Python 服务后再试。'
+      error.value = '知识问答服务暂时不可用，请稍后再试。'
     } else {
       error.value = describeApiError(caught, '知识检索暂时没有完成，请稍后再试。')
     }

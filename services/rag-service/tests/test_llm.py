@@ -29,6 +29,7 @@ class AnswerGenerationTest(unittest.TestCase):
 
         self.assertEqual(answer, "你以前会去散步。[1]")
         request = urlopen.call_args.args[0]
+        self.assertEqual(urlopen.call_args.kwargs["timeout"], 110)
         body = json.loads(request.data)
         self.assertEqual(body["model"], "doubao-seed-2-1-turbo-260628")
         self.assertIn("散步", body["messages"][1]["content"])

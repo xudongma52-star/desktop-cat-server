@@ -26,7 +26,8 @@ public class RagServiceClient {
             @Value("${desktop-cat.rag.service-url:http://127.0.0.1:8090}") String serviceUrl) {
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
         requestFactory.setConnectTimeout(2_000);
-        requestFactory.setReadTimeout(5_000);
+        // Python 最多等待豆包 110 秒；Java 的整条调用上限为 2 分钟。
+        requestFactory.setReadTimeout(120_000);
         this.restClient = restClientBuilder
                 .baseUrl(serviceUrl)
                 .requestFactory(requestFactory)
