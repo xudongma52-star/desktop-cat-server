@@ -1,3 +1,5 @@
+import { apiRequest } from './http'
+
 export interface SystemStatus {
   status: string
   application: string
@@ -7,11 +9,5 @@ export interface SystemStatus {
 }
 
 export async function getSystemStatus(): Promise<SystemStatus> {
-  const response = await fetch('/api/system/status', {
-    signal: AbortSignal.timeout(8000),
-  })
-  if (!response.ok) {
-    throw new Error(`Backend request failed (HTTP ${response.status})`)
-  }
-  return response.json() as Promise<SystemStatus>
+  return apiRequest<SystemStatus>('/api/system/status')
 }

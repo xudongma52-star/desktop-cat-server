@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.desktopcat.server.identity.dao.AppUserDao">
+
+  <sql id="userColumns">
+    user_id,
+    username,
+    password_hash,
+    status,
+    created_at,
+    updated_at
+  </sql>
+
+  <select id="selectById"
+          resultType="com.desktopcat.server.identity.dao.AppUserDO">
+    SELECT <include refid="userColumns"/>
+    FROM app_user
+    WHERE user_id = #{userId}
+  </select>
+
+  <select id="selectByUsername"
+          resultType="com.desktopcat.server.identity.dao.AppUserDO">
+    SELECT <include refid="userColumns"/>
+    FROM app_user
+    WHERE username = #{username}
+  </select>
+
+  <insert id="insertUser"
+          parameterType="com.desktopcat.server.identity.dao.AppUserDO">
+    INSERT INTO app_user (
+    username,
+    password_hash,
+    status
+    ) VALUES (
+    #{username},
+    #{passwordHash},
+    #{status}
+    )
+  </insert>
+
+</mapper>

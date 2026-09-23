@@ -1,12 +1,20 @@
 # Third-party notices
 
-## Happy cat meow
+## Cat purr and twit greetings
 
-- Asset: `src/renderer/src/assets/audio/happy-cat-meow.mp3`
-- Source work: “Cat meow” by TRNGLE, Freesound sound ID 362652
-- Source: https://freesound.org/people/TRNGLE/sounds/362652/
+- Assets: `cat-purr-twit-1.mp3` through `cat-purr-twit-6.mp3`
+- Source works: “Cat_Twit1.wav”, “Cat Happy Purr/Twitter2.wav”, “Cat Happy Purr/Twit3.wav”, “Cat Purr/Twit4.wav”, “Cat Purr/Twit5.wav”, and “Cat Purr/Twit6.wav” by steffcaffrey
+- Sources:
+  - https://freesound.org/people/steffcaffrey/sounds/262306/
+  - https://freesound.org/people/steffcaffrey/sounds/262307/
+  - https://freesound.org/people/steffcaffrey/sounds/262308/
+  - https://freesound.org/people/steffcaffrey/sounds/262309/
+  - https://freesound.org/people/steffcaffrey/sounds/262310/
+  - https://freesound.org/people/steffcaffrey/sounds/262311/
 - License: Creative Commons CC0 1.0 Universal
 - License text: https://creativecommons.org/publicdomain/zero/1.0/
-- Project copy: Freesound high-quality MP3 preview, downloaded 2026-09-14
+- Project copy: Freesound's high-quality MP3 previews of the original 16-bit, 44.1 kHz recordings
 
-The source page describes this 1.166-second recording as a happy cat sound. CC0 permits copying, modification and distribution without requiring attribution. This notice is retained to keep the asset origin auditable.
+The source pages describe all six clips as short, happy cat purr/twit greetings recorded from the same male cat with a Zoom H4. They are used without pitch shifting so the cat's natural voice is preserved.
+
+CC0 permits copying, modification, and distribution, including commercial use, without requiring attribution. These notices are retained to keep the recordings' origins auditable.

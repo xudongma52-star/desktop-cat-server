@@ -4,6 +4,9 @@ out/
 release/
 @desktop-catdesktop/
 target/
+__pycache__/
+.pytest_cache/
+.venv/
 .pnpm-store/
 .m2/
 .logs/
@@ -12,6 +15,9 @@ target/
 .env
 .env.local
 .env.*.local
+deploy/.env
 *.log
+services/server/data/
+depl/
 Thumbs.db
 .DS_Store

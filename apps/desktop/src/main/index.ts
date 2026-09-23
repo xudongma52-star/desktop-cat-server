@@ -1,4 +1,7 @@
-import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
+import { createHash, randomBytes } from 'node:crypto'
+import { existsSync, mkdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
+import { createServer } from 'node:http'
+import { hostname } from 'node:os'
 import { dirname, join } from 'node:path'
 import {
   app,
@@ -7,7 +10,9 @@ import {
   Menu,
   nativeImage,
   powerMonitor,
+  safeStorage,
   screen,
+  shell,
   Tray,
   type Rectangle,
 } from 'electron'
@@ -23,6 +28,8 @@ import {
 } from '../shared/cat-activity'
 import type { CompanionInfo } from '../shared/companion'
 import type { CatProfile } from '../shared/cat-profile'
+import type { Emotion } from '../shared/emotion'
+import type { Reminder } from '../shared/reminder'
 
 const COMPACT_WINDOW_WIDTH = 176
 const COMPACT_WINDOW_HEIGHT = 176
@@ -32,9 +39,22 @@ const MIN_VISIBLE_SIZE = 36
 const MOVEMENT_TICK_MS = 50
 const PROFILE_RECONCILE_INTERVAL_MS = 5 * 60_000
 const PROFILE_EVENT_RETRY_DELAYS_MS = [1_000, 2_000, 5_000, 10_000, 30_000] as const
-const ASSISTANT_API_URL = process.env.DESKTOP_CAT_API_URL ?? 'http://127.0.0.1:8080'
+// 本地开发继续使用本机服务；安装后的客户端默认连接正式站点，仍允许环境变量覆盖以便联调。
+const DEFAULT_REMOTE_APP_URL = 'https://maxmeme.cn'
+const ASSISTANT_API_URL = process.env.DESKTOP_CAT_API_URL
+  ?? (app.isPackaged ? DEFAULT_REMOTE_APP_URL : 'http://127.0.0.1:8080')
+const WEB_APP_URL = process.env.DESKTOP_CAT_WEB_URL
+  ?? (app.isPackaged ? DEFAULT_REMOTE_APP_URL : 'http://127.0.0.1:5173')
+const DESKTOP_AUTHORIZE_URL = `${WEB_APP_URL}/desktop/connect`
+const DESKTOP_EXCHANGE_API_URL = `${ASSISTANT_API_URL}/api/auth/desktop/exchange`
+const DESKTOP_REFRESH_API_URL = `${ASSISTANT_API_URL}/api/auth/desktop/refresh`
+const DESKTOP_REVOKE_API_URL = `${ASSISTANT_API_URL}/api/auth/desktop/revoke`
 const CAT_PROFILE_API_URL = `${ASSISTANT_API_URL}/api/cat/profile`
 const ASSISTANT_EVENTS_API_URL = `${ASSISTANT_API_URL}/api/events`
+const EMOTIONS_API_URL = `${ASSISTANT_API_URL}/api/emotions`
+const REMINDERS_API_URL = `${ASSISTANT_API_URL}/api/reminders`
+const REMINDER_SYNC_INTERVAL_MS = 5 * 60_000
+const REMINDER_DUE_CHECK_INTERVAL_MS = 5_000
 const DEFAULT_CAT_PROFILE: CatProfile = {
   profileId: 1,
   catName: '小饼干',
@@ -48,6 +68,17 @@ type ActivityPanelSide = 'left' | 'right'
 type CompanionState = { firstMetDate: string }
 type ServerEvent = { event: string; data: string }
 type CatProfileUpdatedEvent = { profileId: number; version: number }
+type ReminderChangedEvent = { reminderId: number; version: number; action: string }
+type ReminderCache = { reminders: Reminder[]; notifiedTokens: string[] }
+type StoredAuthState = { encryptedCredential: string }
+type DesktopTokenResponse = {
+  accessToken: string
+  accessTokenExpiresAt: string
+  deviceId: string
+  deviceCredential: string | null
+  userId: number
+  username: string
+}
 
 let catWindow: BrowserWindow | null = null
 let tray: Tray | null = null
@@ -70,6 +101,17 @@ let profileEventReconnectAttempt = 0
 let profileEventConnectionFailed = false
 let profileSyncInFlight: Promise<void> | undefined
 let profileSyncFailed = false
+let reminders: Reminder[] = []
+let notifiedReminderTokens = new Set<string>()
+let reminderSyncTimer: NodeJS.Timeout | undefined
+let reminderDueCheckTimer: NodeJS.Timeout | undefined
+let reminderSyncFailed = false
+let reminderSyncInFlight: Promise<void> | undefined
+let deviceCredential: string | undefined
+let accessToken: string | undefined
+let accessTokenExpiresAt = 0
+let authenticatedUsername: string | undefined
+let authenticationInFlight: Promise<string> | undefined
 
 let currentActivity: CatActivitySnapshot = {
   id: 'idle',
@@ -91,6 +133,266 @@ function getCatProfilePath(): string {
   return join(app.getPath('userData'), 'cat-profile.json')
 }
 
+function getReminderCachePath(): string {
+  return join(app.getPath('userData'), 'reminder-cache.json')
+}
+
+function getAuthStatePath(): string {
+  return join(app.getPath('userData'), 'auth-state.json')
+}
+
+function loadDeviceCredential(): void {
+  const authStatePath = getAuthStatePath()
+  if (!existsSync(authStatePath) || !safeStorage.isEncryptionAvailable()) return
+
+  try {
+    const state = JSON.parse(readFileSync(authStatePath, 'utf8')) as Partial<StoredAuthState>
+    if (typeof state.encryptedCredential !== 'string' || !state.encryptedCredential) return
+    const credential = safeStorage.decryptString(Buffer.from(state.encryptedCredential, 'base64'))
+    if (credential.includes('.')) deviceCredential = credential
+  } catch (error) {
+    console.warn('Failed to restore the desktop authentication state.', error)
+  }
+}
+
+function saveDeviceCredential(credential: string): void {
+  if (!safeStorage.isEncryptionAvailable()) {
+    throw new Error('Secure credential storage is unavailable on this device.')
+  }
+
+  const authStatePath = getAuthStatePath()
+  mkdirSync(dirname(authStatePath), { recursive: true })
+  const state: StoredAuthState = {
+    encryptedCredential: safeStorage.encryptString(credential).toString('base64'),
+  }
+  writeFileSync(authStatePath, JSON.stringify(state, null, 2), 'utf8')
+  deviceCredential = credential
+}
+
+function clearDeviceCredential(): void {
+  deviceCredential = undefined
+  accessToken = undefined
+  accessTokenExpiresAt = 0
+  authenticatedUsername = undefined
+  const authStatePath = getAuthStatePath()
+  try {
+    if (existsSync(authStatePath)) unlinkSync(authStatePath)
+  } catch (error) {
+    console.warn('Failed to remove the desktop authentication state.', error)
+  }
+  updateTrayMenu()
+}
+
+function base64Url(bytes: Buffer): string {
+  return bytes.toString('base64url')
+}
+
+function isDesktopTokenResponse(value: unknown): value is DesktopTokenResponse {
+  if (!value || typeof value !== 'object') return false
+  const candidate = value as Partial<DesktopTokenResponse>
+  return typeof candidate.accessToken === 'string'
+    && candidate.accessToken.startsWith('dcat_')
+    && typeof candidate.accessTokenExpiresAt === 'string'
+    && !Number.isNaN(Date.parse(candidate.accessTokenExpiresAt))
+    && typeof candidate.deviceId === 'string'
+    && (candidate.deviceCredential === null || typeof candidate.deviceCredential === 'string')
+    && Number.isSafeInteger(candidate.userId)
+    && typeof candidate.username === 'string'
+}
+
+async function postAuthenticationRequest(
+  url: string,
+  body: Record<string, string>,
+): Promise<DesktopTokenResponse> {
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(8_000),
+  })
+  if (!response.ok) {
+    const error = new Error(`Authentication request returned HTTP ${response.status}.`)
+    Object.assign(error, { status: response.status })
+    throw error
+  }
+  const candidate: unknown = await response.json()
+  if (!isDesktopTokenResponse(candidate)) {
+    throw new Error('Authentication response is invalid.')
+  }
+  return candidate
+}
+
+function acceptTokenResponse(response: DesktopTokenResponse): string {
+  const wasAuthenticated = Boolean(authenticatedUsername)
+  accessToken = response.accessToken
+  accessTokenExpiresAt = Date.parse(response.accessTokenExpiresAt)
+  authenticatedUsername = response.username
+  if (response.deviceCredential) saveDeviceCredential(response.deviceCredential)
+  updateTrayMenu()
+  if (!wasAuthenticated && (profileReconcileTimer || reminderSyncTimer)) {
+    reconnectProfileEvents()
+    resumeReminderSync()
+  }
+  return response.accessToken
+}
+
+async function refreshDesktopAccessToken(): Promise<string> {
+  if (!deviceCredential) throw new Error('Desktop device is not authorized.')
+  try {
+    return acceptTokenResponse(await postAuthenticationRequest(
+      DESKTOP_REFRESH_API_URL,
+      { deviceCredential },
+    ))
+  } catch (error) {
+    if ((error as { status?: number }).status === 401) clearDeviceCredential()
+    throw error
+  }
+}
+
+async function openBrowserAuthorization(): Promise<string> {
+  if (!safeStorage.isEncryptionAvailable()) {
+    throw new Error('Secure credential storage is unavailable on this device.')
+  }
+  const codeVerifier = base64Url(randomBytes(32))
+  const codeChallenge = base64Url(createHash('sha256').update(codeVerifier).digest())
+  const state = base64Url(randomBytes(24))
+
+  let resolveCode: ((code: string) => void) | undefined
+  let rejectCode: ((reason: Error) => void) | undefined
+  const codePromise = new Promise<string>((resolve, reject) => {
+    resolveCode = resolve
+    rejectCode = reject
+  })
+
+  const callbackServer = createServer((request, response) => {
+    try {
+      const callback = new URL(request.url ?? '/', 'http://127.0.0.1')
+      if (callback.pathname !== '/callback') {
+        response.writeHead(404).end()
+        return
+      }
+      const returnedState = callback.searchParams.get('state')
+      const code = callback.searchParams.get('code')
+      if (returnedState !== state || !code) {
+        response.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' })
+        response.end('登录回调无效，请回到桌面猫重试。')
+        rejectCode?.(new Error('Desktop authorization callback is invalid.'))
+        return
+      }
+
+      response.writeHead(200, {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Cache-Control': 'no-store',
+      })
+      response.end('<!doctype html><meta charset="utf-8"><title>连接成功</title><style>body{font:16px system-ui;display:grid;place-items:center;min-height:80vh;color:#435443;background:#fffaf0}</style><p>桌面猫已经认出你了，可以关闭这个页面。</p>')
+      resolveCode?.(code)
+    } catch (error) {
+      response.writeHead(400).end()
+      rejectCode?.(error instanceof Error ? error : new Error('Desktop authorization failed.'))
+    }
+  })
+
+  await new Promise<void>((resolve, reject) => {
+    callbackServer.once('error', reject)
+    callbackServer.listen(0, '127.0.0.1', () => resolve())
+  })
+
+  const address = callbackServer.address()
+  if (!address || typeof address === 'string') {
+    callbackServer.close()
+    throw new Error('Desktop authorization callback could not be started.')
+  }
+  const redirectUri = `http://127.0.0.1:${address.port}/callback`
+  const authorizationUrl = new URL(DESKTOP_AUTHORIZE_URL)
+  authorizationUrl.searchParams.set('redirect_uri', redirectUri)
+  authorizationUrl.searchParams.set('code_challenge', codeChallenge)
+  authorizationUrl.searchParams.set('state', state)
+  authorizationUrl.searchParams.set('device_name', `${hostname()} 的电脑`)
+  authorizationUrl.searchParams.set('platform', process.platform)
+  authorizationUrl.searchParams.set('app_version', app.getVersion())
+
+  const timeout = setTimeout(() => {
+    rejectCode?.(new Error('Desktop authorization timed out.'))
+  }, 5 * 60_000)
+
+  try {
+    await shell.openExternal(authorizationUrl.toString())
+    const code = await codePromise
+    return acceptTokenResponse(await postAuthenticationRequest(
+      DESKTOP_EXCHANGE_API_URL,
+      { code, codeVerifier, redirectUri },
+    ))
+  } finally {
+    clearTimeout(timeout)
+    callbackServer.close()
+  }
+}
+
+async function ensureAccessToken(interactive: boolean): Promise<string> {
+  if (accessToken && accessTokenExpiresAt > Date.now() + 30_000) return accessToken
+  if (authenticationInFlight) return authenticationInFlight
+
+  authenticationInFlight = (async () => {
+    if (deviceCredential) {
+      try {
+        return await refreshDesktopAccessToken()
+      } catch (error) {
+        if (!interactive || deviceCredential) throw error
+      }
+    }
+    if (!interactive) throw new Error('Desktop authentication is required.')
+    return openBrowserAuthorization()
+  })()
+
+  try {
+    return await authenticationInFlight
+  } finally {
+    authenticationInFlight = undefined
+  }
+}
+
+async function authenticatedFetch(
+  input: string,
+  init: RequestInit = {},
+  interactive = false,
+): Promise<Response> {
+  let token = await ensureAccessToken(interactive)
+  const send = (): Promise<Response> => {
+    const headers = new Headers(init.headers)
+    headers.set('Authorization', `Bearer ${token}`)
+    return fetch(input, { ...init, headers })
+  }
+
+  let response = await send()
+  if (response.status === 401) {
+    accessToken = undefined
+    accessTokenExpiresAt = 0
+    token = await ensureAccessToken(interactive)
+    response = await send()
+  }
+  return response
+}
+
+async function revokeDesktopDevice(): Promise<void> {
+  const credential = deviceCredential
+  try {
+    if (credential) {
+      const response = await fetch(DESKTOP_REVOKE_API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deviceCredential: credential }),
+        signal: AbortSignal.timeout(8_000),
+      })
+      if (!response.ok && response.status !== 401) {
+        throw new Error(`Device revoke request returned HTTP ${response.status}.`)
+      }
+    }
+    clearDeviceCredential()
+  } catch (error) {
+    console.warn('Desktop logout could not be completed; the local credential was kept.', error)
+  }
+}
+
 function isCatProfile(value: unknown): value is CatProfile {
   if (!value || typeof value !== 'object') return false
   const candidate = value as Partial<CatProfile>
@@ -98,6 +400,159 @@ function isCatProfile(value: unknown): value is CatProfile {
     && typeof candidate.catName === 'string' && candidate.catName.trim().length > 0
     && Number.isSafeInteger(candidate.version) && (candidate.version ?? -1) >= 0
     && typeof candidate.updatedAt === 'string'
+}
+
+function isEmotion(value: unknown): value is Emotion {
+  if (!value || typeof value !== 'object') return false
+  const candidate = value as Partial<Emotion>
+  return Number.isSafeInteger(candidate.emotionId) && (candidate.emotionId ?? 0) > 0
+    && typeof candidate.content === 'string' && candidate.content.trim().length > 0
+    && typeof candidate.recordDate === 'string'
+    && typeof candidate.createdAt === 'string'
+}
+
+function isReminder(value: unknown): value is Reminder {
+  if (!value || typeof value !== 'object') return false
+  const candidate = value as Partial<Reminder>
+  return Number.isSafeInteger(candidate.reminderId) && (candidate.reminderId ?? 0) > 0
+    && typeof candidate.content === 'string' && candidate.content.trim().length > 0
+    && typeof candidate.remindAt === 'string' && !Number.isNaN(Date.parse(candidate.remindAt))
+    && candidate.status === 'PENDING'
+    && Number.isSafeInteger(candidate.version) && (candidate.version ?? -1) >= 0
+}
+
+function reminderToken(reminder: Reminder): string {
+  // 版本进入标记后，同一版本只提醒一次；网站修改后新版本仍可按新时间再次提醒。
+  return `${reminder.reminderId}:${reminder.version}`
+}
+
+function loadReminderCache(): void {
+  const cachePath = getReminderCachePath()
+  if (!existsSync(cachePath)) return
+  try {
+    const candidate = JSON.parse(readFileSync(cachePath, 'utf8')) as Partial<ReminderCache>
+    reminders = Array.isArray(candidate.reminders) ? candidate.reminders.filter(isReminder) : []
+    notifiedReminderTokens = new Set(
+      Array.isArray(candidate.notifiedTokens)
+        ? candidate.notifiedTokens.filter((token): token is string => typeof token === 'string')
+        : [],
+    )
+  } catch (error) {
+    console.error('Failed to read the cached reminders.', error)
+  }
+}
+
+function saveReminderCache(): void {
+  const cachePath = getReminderCachePath()
+  try {
+    mkdirSync(dirname(cachePath), { recursive: true })
+    const cache: ReminderCache = {
+      reminders,
+      notifiedTokens: [...notifiedReminderTokens],
+    }
+    writeFileSync(cachePath, JSON.stringify(cache, null, 2), 'utf8')
+  } catch (error) {
+    console.error('Failed to save the reminder cache.', error)
+  }
+}
+
+function checkDueReminders(): void {
+  if (!catWindow || catWindow.isDestroyed() || catWindow.webContents.isLoading()) return
+  const now = Date.now()
+  const dueReminder = reminders.find((reminder) => {
+    const token = reminderToken(reminder)
+    return Date.parse(reminder.remindAt) <= now && !notifiedReminderTokens.has(token)
+  })
+  if (!dueReminder) return
+
+  notifiedReminderTokens.add(reminderToken(dueReminder))
+  saveReminderCache()
+  showCat()
+  catWindow.webContents.send('desktop-cat:reminder-due', dueReminder)
+}
+
+async function performReminderSync(): Promise<void> {
+  try {
+    const response = await authenticatedFetch(`${REMINDERS_API_URL}?scope=PENDING`, {
+      signal: AbortSignal.timeout(5_000),
+    })
+    if (!response.ok) throw new Error(`Reminder request returned HTTP ${response.status}.`)
+    const candidate: unknown = await response.json()
+    if (!Array.isArray(candidate) || !candidate.every(isReminder)) {
+      throw new Error('Reminder response is invalid.')
+    }
+
+    reminders = candidate
+    const activeTokens = new Set(reminders.map(reminderToken))
+    // 只保留服务端仍未完成的版本，避免缓存随着已完成或已删除事项一直增长。
+    notifiedReminderTokens = new Set(
+      [...notifiedReminderTokens].filter((token) => activeTokens.has(token)),
+    )
+    saveReminderCache()
+    checkDueReminders()
+    if (reminderSyncFailed) console.info('Reminder synchronization recovered.')
+    reminderSyncFailed = false
+  } catch (error) {
+    if (!reminderSyncFailed) {
+      console.warn('Reminder synchronization is unavailable; using cached reminders.', error)
+    }
+    reminderSyncFailed = true
+    checkDueReminders()
+  }
+}
+
+async function syncReminders(): Promise<void> {
+  if (reminderSyncInFlight) return reminderSyncInFlight
+  const currentSync = performReminderSync()
+  reminderSyncInFlight = currentSync
+  try {
+    await currentSync
+  } finally {
+    if (reminderSyncInFlight === currentSync) reminderSyncInFlight = undefined
+  }
+}
+
+async function completeReminder(reminderId: number, version: number): Promise<Reminder> {
+  const response = await authenticatedFetch(`${REMINDERS_API_URL}/${reminderId}/complete`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ version }),
+    signal: AbortSignal.timeout(5_000),
+  }, true)
+  if (!response.ok) throw new Error(`Complete reminder request returned HTTP ${response.status}.`)
+  const candidate: unknown = await response.json()
+  if (!candidate || typeof candidate !== 'object') throw new Error('Complete reminder response is invalid.')
+  const completed = candidate as Partial<Reminder>
+  if (completed.status !== 'COMPLETED' || completed.reminderId !== reminderId) {
+    throw new Error('Complete reminder response is invalid.')
+  }
+  reminders = reminders.filter((reminder) => reminder.reminderId !== reminderId)
+  saveReminderCache()
+  void syncReminders()
+  return completed as Reminder
+}
+
+function startReminderSync(): void {
+  void syncReminders()
+  reminderSyncTimer = setInterval(() => void syncReminders(), REMINDER_SYNC_INTERVAL_MS)
+  reminderDueCheckTimer = setInterval(checkDueReminders, REMINDER_DUE_CHECK_INTERVAL_MS)
+}
+
+function resumeReminderSync(): void {
+  void syncReminders()
+}
+
+async function createEmotion(content: string): Promise<Emotion> {
+  const response = await authenticatedFetch(EMOTIONS_API_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content }),
+    signal: AbortSignal.timeout(5_000),
+  }, true)
+  if (!response.ok) throw new Error(`Emotion request returned HTTP ${response.status}.`)
+  const candidate: unknown = await response.json()
+  if (!isEmotion(candidate)) throw new Error('Emotion response is invalid.')
+  return candidate
 }
 
 function loadCatProfile(): void {
@@ -123,7 +578,10 @@ function saveCatProfile(): void {
 
 async function performCatProfileSync(): Promise<void> {
   try {
-    const response = await fetch(CAT_PROFILE_API_URL, { signal: AbortSignal.timeout(4_000) })
+    const response = await authenticatedFetch(
+      CAT_PROFILE_API_URL,
+      { signal: AbortSignal.timeout(4_000) },
+    )
     if (!response.ok) throw new Error(`Cat profile request returned HTTP ${response.status}.`)
     const candidate: unknown = await response.json()
     if (!isCatProfile(candidate)) throw new Error('Cat profile response is invalid.')
@@ -177,13 +635,27 @@ function isCatProfileUpdatedEvent(value: unknown): value is CatProfileUpdatedEve
     && Number.isSafeInteger(candidate.version) && (candidate.version ?? -1) >= 0
 }
 
+function isReminderChangedEvent(value: unknown): value is ReminderChangedEvent {
+  if (!value || typeof value !== 'object') return false
+  const candidate = value as Partial<ReminderChangedEvent>
+  return Number.isSafeInteger(candidate.reminderId) && (candidate.reminderId ?? 0) > 0
+    && Number.isSafeInteger(candidate.version) && (candidate.version ?? -1) >= 0
+    && typeof candidate.action === 'string' && candidate.action.length > 0
+}
+
 async function handleServerEvent(serverEvent: ServerEvent): Promise<void> {
-  if (serverEvent.event !== 'cat-profile.updated') return
   try {
     const candidate: unknown = JSON.parse(serverEvent.data)
-    if (!isCatProfileUpdatedEvent(candidate)) throw new Error('Profile update event is invalid.')
-    if (candidate.profileId === catProfile.profileId && candidate.version > catProfile.version) {
-      await syncCatProfile()
+    if (serverEvent.event === 'cat-profile.updated') {
+      if (!isCatProfileUpdatedEvent(candidate)) throw new Error('Profile update event is invalid.')
+      if (candidate.profileId === catProfile.profileId && candidate.version > catProfile.version) {
+        await syncCatProfile()
+      }
+      return
+    }
+    if (serverEvent.event === 'reminder.changed') {
+      if (!isReminderChangedEvent(candidate)) throw new Error('Reminder update event is invalid.')
+      await syncReminders()
     }
   } catch (error) {
     console.warn('Ignored an invalid assistant server event.', error)
@@ -229,7 +701,7 @@ async function connectProfileEvents(): Promise<void> {
   profileEventAbortController = abortController
 
   try {
-    const response = await fetch(ASSISTANT_EVENTS_API_URL, {
+    const response = await authenticatedFetch(ASSISTANT_EVENTS_API_URL, {
       headers: { Accept: 'text/event-stream' },
       signal: abortController.signal,
     })
@@ -240,6 +712,7 @@ async function connectProfileEvents(): Promise<void> {
 
     // Reconcile once after every connection so events missed while offline cannot leave stale state.
     await syncCatProfile()
+    await syncReminders()
     await consumeServerEvents(response)
     if (!abortController.signal.aborted) throw new Error('Assistant event stream closed unexpectedly.')
   } catch (error) {
@@ -367,6 +840,37 @@ function getCurrentWindowSize(): { width: number; height: number } {
     : { width: COMPACT_WINDOW_WIDTH, height: COMPACT_WINDOW_HEIGHT }
 }
 
+function normalizeScreenCoordinate(value: number): number {
+  const rounded = Math.round(value)
+  return Object.is(rounded, -0) ? 0 : rounded
+}
+
+function constrainPositionToDisplay(position: WindowPosition): WindowPosition {
+  const { width, height } = getCurrentWindowSize()
+  const center = {
+    x: normalizeScreenCoordinate(position.x + width / 2),
+    y: normalizeScreenCoordinate(position.y + height / 2),
+  }
+  const { workArea } = screen.getDisplayNearestPoint(center)
+  const maximumX = Math.max(workArea.x, workArea.x + workArea.width - width)
+  const maximumY = Math.max(workArea.y, workArea.y + workArea.height - height)
+
+  return {
+    x: normalizeScreenCoordinate(Math.min(Math.max(position.x, workArea.x), maximumX)),
+    y: normalizeScreenCoordinate(Math.min(Math.max(position.y, workArea.y), maximumY)),
+  }
+}
+
+function setCatWindowPosition(position: WindowPosition): void {
+  if (!catWindow || catWindow.isDestroyed()) return
+  const normalizedPosition = {
+    x: normalizeScreenCoordinate(position.x),
+    y: normalizeScreenCoordinate(position.y),
+  }
+  catWindow.setPosition(normalizedPosition.x, normalizedPosition.y, false)
+  precisePosition = normalizedPosition
+}
+
 function intersectsEnough(position: WindowPosition, workArea: Rectangle): boolean {
   const { width, height } = getCurrentWindowSize()
   const overlapWidth = Math.min(position.x + width, workArea.x + workArea.width)
@@ -382,15 +886,18 @@ function isPositionVisible(position: WindowPosition): boolean {
 
 function getDefaultPosition(): WindowPosition {
   const { workArea } = screen.getPrimaryDisplay()
+  const { width, height } = getCurrentWindowSize()
   return {
-    x: workArea.x + workArea.width - COMPACT_WINDOW_WIDTH - 16,
-    y: workArea.y + workArea.height - COMPACT_WINDOW_HEIGHT - 16,
+    x: workArea.x + workArea.width - width - 16,
+    y: workArea.y + workArea.height - height - 16,
   }
 }
 
 function getInitialPosition(): WindowPosition {
   const savedPosition = readSavedPosition()
-  return savedPosition && isPositionVisible(savedPosition) ? savedPosition : getDefaultPosition()
+  return savedPosition && isPositionVisible(savedPosition)
+    ? constrainPositionToDisplay(savedPosition)
+    : getDefaultPosition()
 }
 
 function saveWindowPosition(): void {
@@ -415,23 +922,32 @@ function schedulePositionSave(): void {
   savePositionTimer = setTimeout(saveWindowPosition, 150)
 }
 
-function ensureWindowIsVisible(): void {
+function ensureWindowIsVisible(moveToPrimaryDisplay = false): void {
   if (!catWindow || catWindow.isDestroyed()) return
   const [x, y] = catWindow.getPosition()
-  if (!isPositionVisible({ x, y })) {
-    const fallback = getDefaultPosition()
-    catWindow.setPosition(fallback.x, fallback.y)
-    precisePosition = fallback
-  }
+  const currentPosition = { x, y }
+  const safePosition = moveToPrimaryDisplay
+    ? getDefaultPosition()
+    : constrainPositionToDisplay(currentPosition)
+  if (safePosition.x === x && safePosition.y === y) return
+
+  setCatWindowPosition(safePosition)
+  schedulePositionSave()
+  console.info('Moved the desktop cat back into a visible work area.', {
+    from: currentPosition,
+    to: safePosition,
+    display: moveToPrimaryDisplay ? 'primary' : 'nearest',
+  })
 }
 
-function showCat(): void {
+function showCat(moveToPrimaryDisplay = false): void {
   if (!catWindow || catWindow.isDestroyed()) {
     createCatWindow()
     return
   }
-  ensureWindowIsVisible()
+  ensureWindowIsVisible(moveToPrimaryDisplay)
   catWindow.showInactive()
+  catWindow.moveTop()
 }
 
 function createCatWindow(): void {
@@ -596,15 +1112,36 @@ function recoverMovementPosition(mode: CatMovementMode, reason: unknown): void {
   if (!catWindow || catWindow.isDestroyed()) return
   const bounds = catWindow.getBounds()
   const fallback = getDefaultPosition()
-  precisePosition = Number.isFinite(bounds.x) && Number.isFinite(bounds.y)
+  const currentPosition = Number.isFinite(bounds.x) && Number.isFinite(bounds.y)
     ? { x: bounds.x, y: bounds.y }
     : fallback
+  const safePosition = constrainPositionToDisplay(currentPosition)
+
   console.error('Recovered from an invalid desktop cat movement position.', {
     reason,
-    precisePosition,
+    currentPosition,
+    safePosition,
     velocity,
   })
-  chooseVelocity(mode)
+
+  try {
+    setCatWindowPosition(safePosition)
+    schedulePositionSave()
+    chooseVelocity(mode)
+  } catch (recoveryError) {
+    if (movementTimer) clearInterval(movementTimer)
+    movementTimer = undefined
+    velocity = { x: 0, y: 0 }
+    try {
+      setCatWindowPosition(fallback)
+      schedulePositionSave()
+    } catch (fallbackError) {
+      console.error('Failed to restore the desktop cat to the primary display.', {
+        recoveryError,
+        fallbackError,
+      })
+    }
+  }
 }
 
 function moveCatOneFrame(mode: CatMovementMode): void {
@@ -635,8 +1172,8 @@ function moveCatOneFrame(mode: CatMovementMode): void {
     velocity.y *= -1
   }
 
-  const targetX = Math.round(nextX)
-  const targetY = Math.round(nextY)
+  const targetX = normalizeScreenCoordinate(nextX)
+  const targetY = normalizeScreenCoordinate(nextY)
   precisePosition = { x: nextX, y: nextY }
 
   try {
@@ -723,12 +1260,33 @@ function createTrayIcon(): Electron.NativeImage {
   return nativeImage.createFromBitmap(pixels, { width: size, height: size })
 }
 
-function createTray(): void {
-  tray = new Tray(createTrayIcon())
-  tray.setToolTip('猫的角落')
+function updateTrayMenu(): void {
+  if (!tray || tray.isDestroyed()) return
+  const accountLabel = authenticatedUsername
+    ? `已登录：${authenticatedUsername}`
+    : deviceCredential
+      ? '正在恢复登录…'
+      : '登录账号…'
+
   tray.setContextMenu(Menu.buildFromTemplate([
-    { label: '显示小猫', click: showCat },
+    { label: '显示小猫（主屏幕）', click: () => showCat(true) },
     { label: '隐藏小猫', click: () => catWindow?.hide() },
+    { type: 'separator' },
+    {
+      label: accountLabel,
+      enabled: !authenticatedUsername,
+      click: () => {
+        void ensureAccessToken(true).catch((error) => {
+          console.warn('Desktop authentication did not complete.', error)
+        })
+      },
+    },
+    ...(deviceCredential
+      ? [{
+          label: '退出账号',
+          click: () => void revokeDesktopDevice(),
+        } satisfies Electron.MenuItemConstructorOptions]
+      : []),
     { type: 'separator' },
     {
       label: '退出',
@@ -738,7 +1296,13 @@ function createTray(): void {
       },
     },
   ]))
-  tray.on('click', showCat)
+}
+
+function createTray(): void {
+  tray = new Tray(createTrayIcon())
+  tray.setToolTip('猫的角落')
+  updateTrayMenu()
+  tray.on('click', () => showCat(true))
 }
 
 function registerIpcHandlers(): void {
@@ -756,11 +1320,11 @@ function registerIpcHandlers(): void {
     ) return
 
     const [currentX, currentY] = catWindow.getPosition()
-    precisePosition = {
+    const nextPosition = constrainPositionToDisplay({
       x: currentX + Math.round(deltaX),
       y: currentY + Math.round(deltaY),
-    }
-    catWindow.setPosition(precisePosition.x, precisePosition.y)
+    })
+    setCatWindowPosition(nextPosition)
     schedulePositionSave()
   })
 
@@ -794,6 +1358,25 @@ function registerIpcHandlers(): void {
     return catProfile
   })
 
+  ipcMain.handle('desktop-cat:create-emotion', (event, content: unknown) => {
+    if (!isSenderCatWindow(event.sender)) throw new Error('Emotion access denied.')
+    if (typeof content !== 'string' || content.trim().length === 0) {
+      throw new Error('Emotion content is required.')
+    }
+    return createEmotion(content.trim())
+  })
+
+  ipcMain.handle('desktop-cat:complete-reminder', (event, reminderId: unknown, version: unknown) => {
+    if (!isSenderCatWindow(event.sender)) throw new Error('Reminder access denied.')
+    if (!Number.isSafeInteger(reminderId) || (reminderId as number) <= 0) {
+      throw new Error('Reminder id is invalid.')
+    }
+    if (!Number.isSafeInteger(version) || (version as number) < 0) {
+      throw new Error('Reminder version is invalid.')
+    }
+    return completeReminder(reminderId as number, version as number)
+  })
+
   ipcMain.handle('desktop-cat:request-activity', (event, activityId: unknown) => {
     if (!isSenderCatWindow(event.sender)) throw new Error('Activity access denied.')
     if (!isCatActivityId(activityId)) throw new Error('Unknown cat activity.')
@@ -806,19 +1389,26 @@ const hasSingleInstanceLock = app.requestSingleInstanceLock()
 if (!hasSingleInstanceLock) {
   app.quit()
 } else {
-  app.on('second-instance', showCat)
+  app.on('second-instance', () => showCat(true))
   app.whenReady().then(() => {
     app.setAppUserModelId('com.desktopcat.corner')
     registerIpcHandlers()
+    loadDeviceCredential()
     loadCompanionState()
     loadCatProfile()
+    loadReminderCache()
     createCatWindow()
     createTray()
     startActivity('idle')
+    void ensureAccessToken(true).catch((error) => {
+      console.warn('Desktop authentication is waiting for the user.', error)
+    })
     startCatProfileSync()
+    startReminderSync()
     powerMonitor.on('resume', reconnectProfileEvents)
-    screen.on('display-removed', ensureWindowIsVisible)
-    screen.on('display-metrics-changed', ensureWindowIsVisible)
+    powerMonitor.on('resume', resumeReminderSync)
+    screen.on('display-removed', () => ensureWindowIsVisible())
+    screen.on('display-metrics-changed', () => ensureWindowIsVisible())
   })
 }
 
@@ -827,8 +1417,11 @@ app.on('before-quit', () => {
   if (savePositionTimer) clearTimeout(savePositionTimer)
   if (profileReconcileTimer) clearInterval(profileReconcileTimer)
   if (profileEventReconnectTimer) clearTimeout(profileEventReconnectTimer)
+  if (reminderSyncTimer) clearInterval(reminderSyncTimer)
+  if (reminderDueCheckTimer) clearInterval(reminderDueCheckTimer)
   profileEventAbortController?.abort()
   powerMonitor.removeListener('resume', reconnectProfileEvents)
+  powerMonitor.removeListener('resume', resumeReminderSync)
   clearActivityEndTimer()
   stopMovement()
   saveWindowPosition()

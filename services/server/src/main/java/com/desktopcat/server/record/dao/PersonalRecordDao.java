@@ -1,0 +1,40 @@
+package com.desktopcat.server.record.dao;
+
+import java.time.LocalDate;
+import java.util.List;
+import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Param;
+
+@Mapper
+public interface PersonalRecordDao {
+    int insertRecord(PersonalRecordDO record);
+
+    PersonalRecordDO selectActiveById(
+            @Param("userId") long userId,
+            @Param("recordId") long recordId);
+
+    List<PersonalRecordDO> selectActivePage(
+            @Param("userId") long userId,
+            @Param("recordType") String recordType,
+            @Param("recallEnabled") Boolean recallEnabled,
+            @Param("offset") int offset,
+            @Param("limit") int limit);
+
+    long countActive(
+            @Param("userId") long userId,
+            @Param("recordType") String recordType,
+            @Param("recallEnabled") Boolean recallEnabled);
+
+    List<PersonalRecordActivityDO> selectDailyActivity(
+            @Param("userId") long userId,
+            @Param("recordType") String recordType,
+            @Param("startDate") LocalDate startDate,
+            @Param("endDate") LocalDate endDate);
+
+    int updateRecord(PersonalRecordDO record);
+
+    int logicalDelete(
+            @Param("userId") long userId,
+            @Param("recordId") long recordId,
+            @Param("version") int version);
+}

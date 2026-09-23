@@ -9,6 +9,17 @@ spring:
   flyway:
     default-schema: public
     schemas: public
+  data:
+    redis:
+      host: ${REDIS_HOST:127.0.0.1}
+      port: ${REDIS_PORT:6380}
+      connect-timeout: 2s
+      timeout: 2s
+  session:
+    store-type: redis
+    timeout: 12h
+    redis:
+      namespace: desktop-cat:session
 
 mybatis:
   mapper-locations: classpath:/mappers/*.xml

@@ -59,3 +59,27 @@ jobs:
       - name: Test backend
         working-directory: services/server
         run: ./mvnw --batch-mode verify
+
+  knowledge-retrieval:
+    name: knowledge-retrieval
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: services/rag-service/requirements.txt
+
+      - name: Install Python dependencies
+        working-directory: services/rag-service
+        run: python -m pip install -r requirements.txt
+
+      - name: Test knowledge retrieval
+        working-directory: services/rag-service
+        run: |
+          python -m unittest discover -s tests -v
+          python -c "from rag_service.main import app; assert app.version == '0.1.0'"

@@ -1,12 +1,14 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import {
   CAT_ACTIVITY_DEFINITIONS,
   CAT_ACTIVITY_IDS,
   type CatActivityId,
   type CatActivitySnapshot,
 } from '../../shared/cat-activity'
+import type { Reminder } from '../../shared/reminder'
 import { getAmbientMessages, TOUCH_MESSAGES } from './cat-dialogue'
+import { disposeCatSounds, playCatSound } from './cat-sounds'
 import eatingCatUrl from './assets/cat/cat-eat-pixel-v5.png'
 import groomingCatUrl from './assets/cat/cat-groom-pixel-v5.png'
 import idleCatUrl from './assets/cat/cat-idle-pixel-v5.png'
@@ -14,7 +16,6 @@ import playingCatUrl from './assets/cat/cat-play-pixel-v5.png'
 import runningCatUrl from './assets/cat/cat-run-pixel-v5.png'
 import sleepingCatUrl from './assets/cat/cat-sleep-pixel-v5.png'
 import walkingCatUrl from './assets/cat/cat-walk-pixel-v5.png'
-import meowUrl from './assets/audio/happy-cat-meow.mp3'
 
 const catName = ref('小饼干')
 const activityOptions = CAT_ACTIVITY_IDS.map((activityId) => CAT_ACTIVITY_DEFINITIONS[activityId])
@@ -43,12 +44,19 @@ const activityPanelSide = ref<'left' | 'right'>('right')
 const isRequestingActivity = ref(false)
 const decisionKind = ref<'none' | 'accepted' | 'refused' | 'error'>('none')
 const decisionMessage = ref(`选一个活动，看看${catName.value}愿不愿意。`)
+const EMOTION_DRAFT_KEY = 'desktop-cat:emotion-draft'
+const isEmotionInputOpen = ref(false)
+const isSavingEmotion = ref(false)
+const emotionDraft = ref(window.localStorage.getItem(EMOTION_DRAFT_KEY) ?? '')
+const emotionError = ref('')
+const emotionInput = ref<HTMLTextAreaElement | null>(null)
+const dueReminder = ref<Reminder | null>(null)
+const isCompletingReminder = ref(false)
 
 const currentDefinition = computed(() => CAT_ACTIVITY_DEFINITIONS[activity.value.id])
 const catImageUrl = computed(() => catSpriteUrls[activity.value.id])
 const catLabel = computed(() => `正在${currentDefinition.value.label}的${catName.value}`)
 
-let meowAudio: HTMLAudioElement | null = null
 let reactionTimer: number | undefined
 let messageTimer: number | undefined
 let conversationTimer: number | undefined
@@ -56,6 +64,7 @@ let closeMenuTimer: number | undefined
 let companionTimer: number | undefined
 let removeActivityListener: (() => void) | undefined
 let removeProfileListener: (() => void) | undefined
+let removeReminderListener: (() => void) | undefined
 let isIgnoringMouseEvents = false
 let activePointerId: number | undefined
 let dragStartScreenX = 0
@@ -84,16 +93,6 @@ function handleMouseMove(event: MouseEvent): void {
 
 function handleMouseLeave(): void {
   setMousePassThrough(true)
-}
-
-function playMeow(): void {
-  meowAudio ??= new Audio(meowUrl)
-  meowAudio.pause()
-  meowAudio.currentTime = 0
-  meowAudio.volume = 0.58
-  void meowAudio.play().catch((error: unknown) => {
-    console.warn('Failed to play the cat meow.', error)
-  })
 }
 
 function clearMessageTimer(): void {
@@ -135,6 +134,12 @@ function pickAmbientMessage(): string {
   return pickDialogue(getAmbientMessages())
 }
 
+function formatDueReminderMessage(reminder: Reminder): string {
+  const characters = Array.from(reminder.content)
+  const summary = characters.length > 42 ? `${characters.slice(0, 42).join('')}…` : reminder.content
+  return `到时间啦：${summary}`
+}
+
 function scheduleConversation(delayMs?: number): void {
   clearConversationTimer()
   const nextDelay = delayMs ?? Math.floor(
@@ -156,8 +161,12 @@ function showTemporaryMessage(nextMessage: string, holdMs = 4_800): void {
   message.value = nextMessage
   messageTimer = window.setTimeout(() => {
     messageTimer = undefined
-    message.value = pickAmbientMessage()
-    scheduleConversation()
+    if (dueReminder.value) {
+      message.value = formatDueReminderMessage(dueReminder.value)
+    } else {
+      message.value = pickAmbientMessage()
+      scheduleConversation()
+    }
   }, holdMs)
 }
 
@@ -174,6 +183,75 @@ function syncMovementPause(): void {
   window.desktopCat.setMovementPaused(isActivityMenuOpen.value || isDragging.value)
 }
 
+watch(emotionDraft, (value) => {
+  if (value) window.localStorage.setItem(EMOTION_DRAFT_KEY, value)
+  else window.localStorage.removeItem(EMOTION_DRAFT_KEY)
+})
+
+async function openEmotionInput(): Promise<void> {
+  emotionError.value = ''
+  isEmotionInputOpen.value = true
+  await nextTick()
+  emotionInput.value?.focus()
+}
+
+function handleEmotionKeydown(event: KeyboardEvent): void {
+  if (event.key !== 'Enter' || event.shiftKey || event.isComposing) return
+  event.preventDefault()
+  void submitEmotion()
+}
+
+async function submitEmotion(): Promise<void> {
+  if (isSavingEmotion.value) return
+  const content = emotionDraft.value.trim()
+  if (!content) {
+    emotionError.value = '写点什么再告诉我吧。'
+    return
+  }
+
+  isSavingEmotion.value = true
+  emotionError.value = ''
+  try {
+    await window.desktopCat.createEmotion(content)
+    emotionDraft.value = ''
+    isEmotionInputOpen.value = false
+    await setActivityMenuOpen(false)
+    showTemporaryMessage('记下了。', 3_600)
+  } catch (error) {
+    console.error('Failed to save the emotion.', error)
+    emotionError.value = '刚才没有保存成功，内容还在这里。'
+  } finally {
+    isSavingEmotion.value = false
+  }
+}
+
+async function handleDueReminder(reminder: Reminder): Promise<void> {
+  if (isActivityMenuOpen.value) await setActivityMenuOpen(false)
+  dueReminder.value = reminder
+  showTemporaryMessage(formatDueReminderMessage(reminder), 60_000)
+  playCatSound('reminder')
+  setMousePassThrough(false)
+}
+
+async function completeDueReminder(): Promise<void> {
+  if (!dueReminder.value || isCompletingReminder.value) return
+  isCompletingReminder.value = true
+  try {
+    await window.desktopCat.completeReminder(
+      dueReminder.value.reminderId,
+      dueReminder.value.version,
+    )
+    dueReminder.value = null
+    showTemporaryMessage('完成啦！辛苦了，休息一下吧。', 7_000)
+    playCatSound('happy')
+  } catch (error) {
+    console.error('Failed to complete the reminder.', error)
+    showTemporaryMessage('刚才没有记成功，再点一次试试。', 7_000)
+  } finally {
+    isCompletingReminder.value = false
+  }
+}
+
 async function setActivityMenuOpen(open: boolean): Promise<void> {
   if (closeMenuTimer) {
     window.clearTimeout(closeMenuTimer)
@@ -187,6 +265,7 @@ async function setActivityMenuOpen(open: boolean): Promise<void> {
     decisionMessage.value = `选一个活动，看看${catName.value}愿不愿意。`
     setMousePassThrough(false)
   } else {
+    isEmotionInputOpen.value = false
     isActivityMenuOpen.value = false
     await window.desktopCat.setActivityPanelOpen(false)
   }
@@ -205,6 +284,7 @@ async function chooseActivity(activityId: CatActivityId): Promise<void> {
     decisionKind.value = result.accepted ? 'accepted' : 'refused'
     decisionMessage.value = result.message
     showTemporaryMessage(result.message)
+    playCatSound(result.accepted ? 'happy' : 'protest')
 
     if (result.accepted) {
       closeMenuTimer = window.setTimeout(() => void setActivityMenuOpen(false), 1_100)
@@ -219,7 +299,7 @@ async function chooseActivity(activityId: CatActivityId): Promise<void> {
 }
 
 function reactToTouch(): void {
-  playMeow()
+  playCatSound('touch')
   isReacting.value = false
   if (reactionTimer) window.clearTimeout(reactionTimer)
   const touchMessage = pickDialogue(TOUCH_MESSAGES)
@@ -239,7 +319,7 @@ function handleCatClick(): void {
     suppressNextClick = false
     return
   }
-  playMeow()
+  playCatSound('greeting')
   void setActivityMenuOpen(true)
 }
 
@@ -295,6 +375,9 @@ onMounted(async () => {
   removeProfileListener = window.desktopCat.onCatProfileChanged((profile) => {
     catName.value = profile.catName
   })
+  removeReminderListener = window.desktopCat.onReminderDue((reminder) => {
+    void handleDueReminder(reminder)
+  })
 
   try {
     catName.value = (await window.desktopCat.getCatProfile()).catName
@@ -313,6 +396,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('mouseleave', handleMouseLeave)
   removeActivityListener?.()
   removeProfileListener?.()
+  removeReminderListener?.()
   window.desktopCat.setMovementPaused(false)
   if (isActivityMenuOpen.value) void window.desktopCat.setActivityPanelOpen(false)
   if (reactionTimer) window.clearTimeout(reactionTimer)
@@ -320,10 +404,7 @@ onBeforeUnmount(() => {
   if (companionTimer) window.clearTimeout(companionTimer)
   clearMessageTimer()
   clearConversationTimer()
-  if (meowAudio) {
-    meowAudio.pause()
-    meowAudio.src = ''
-  }
+  disposeCatSounds()
 })
 </script>
 
@@ -333,10 +414,18 @@ onBeforeUnmount(() => {
     :class="[`state-${activity.id}`, { 'menu-open': isActivityMenuOpen, [`panel-${activityPanelSide}`]: isActivityMenuOpen }]"
   >
     <div class="cat-stage">
-      <p v-if="!isActivityMenuOpen" class="speech" role="status" data-interactive :title="`按住气泡拖动${catName}`">
+      <div v-if="!isActivityMenuOpen" class="speech" role="status" data-interactive :title="`按住气泡拖动${catName}`">
         <span>{{ message }}</span>
-        <small>{{ currentDefinition.icon }} {{ currentDefinition.label }}</small>
-      </p>
+        <button
+          v-if="dueReminder"
+          class="reminder-complete"
+          type="button"
+          data-interactive
+          :disabled="isCompletingReminder"
+          @click="completeDueReminder"
+        >{{ isCompletingReminder ? '正在完成…' : '✓ 完成这件事' }}</button>
+        <small v-else>{{ currentDefinition.icon }} {{ currentDefinition.label }}</small>
+      </div>
 
       <div v-if="!isActivityMenuOpen" class="drag-handle" data-interactive :title="`按住这里拖动${catName}`" />
 
@@ -367,12 +456,32 @@ onBeforeUnmount(() => {
       <div v-if="activity.id === 'eating'" class="activity-mark treat-mark" aria-hidden="true">♡</div>
     </div>
 
-    <section v-if="isActivityMenuOpen" class="activity-panel" data-interactive :aria-label="`选择${catName}的活动`">
+    <section v-if="isActivityMenuOpen" class="activity-panel" data-interactive :aria-label="isEmotionInputOpen ? `告诉${catName}一件事` : `选择${catName}的活动`">
       <header>
-        <strong>你想让{{ catName }}干什么？</strong>
-        <button type="button" aria-label="关闭活动选择" @click="void setActivityMenuOpen(false)">×</button>
+        <strong>{{ isEmotionInputOpen ? '想说什么就说吧' : `你想让${catName}干什么？` }}</strong>
+        <span class="panel-header-actions">
+          <button v-if="!isEmotionInputOpen" type="button" title="跟小猫说句话" aria-label="跟小猫说句话" @click="openEmotionInput">✎</button>
+          <button type="button" aria-label="关闭面板" @click="void setActivityMenuOpen(false)">×</button>
+        </span>
       </header>
 
+      <form v-if="isEmotionInputOpen" class="emotion-form" @submit.prevent="submitEmotion">
+        <textarea
+          ref="emotionInput"
+          v-model="emotionDraft"
+          rows="5"
+          placeholder="不用整理，想到什么就说什么……"
+          :disabled="isSavingEmotion"
+          @keydown="handleEmotionKeydown"
+        ></textarea>
+        <p class="emotion-help">Enter 发送 · Shift + Enter 换行</p>
+        <p v-if="emotionError" class="emotion-error" role="alert">{{ emotionError }}</p>
+        <button class="emotion-send" type="submit" :disabled="isSavingEmotion">
+          {{ isSavingEmotion ? '正在记下…' : '告诉小猫' }}
+        </button>
+      </form>
+
+      <template v-else>
       <p class="decision" :class="decisionKind" role="status">{{ decisionMessage }}</p>
 
       <div class="activity-grid">
@@ -398,6 +507,7 @@ onBeforeUnmount(() => {
         <strong>{{ catName }}</strong>
         <small>已经陪伴了你 {{ companionDays }} 天</small>
       </button>
+      </template>
     </section>
   </main>
 </template>
@@ -450,6 +560,28 @@ onBeforeUnmount(() => {
   color: #9a765d;
   font-size: 8px;
 }
+
+.reminder-complete {
+  justify-self: center;
+  width: 100%;
+  min-height: 24px;
+  margin-top: 6px;
+  padding: 5px 9px;
+  border: 1px solid #536d50;
+  border-radius: 9px;
+  color: #fff;
+  background: #657d5d;
+  box-shadow: 0 2px 6px rgb(64 86 61 / 22%);
+  font-size: 9px;
+  font-weight: 650;
+  cursor: pointer;
+  pointer-events: auto;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+.reminder-complete:hover { background: #435e42; }
+.reminder-complete:disabled { cursor: wait; opacity: .6; }
 
 .speech:active { cursor: grabbing; }
 
@@ -590,6 +722,15 @@ onBeforeUnmount(() => {
 .activity-panel header { display: flex; align-items: center; justify-content: space-between; height: 23px; }
 .activity-panel header strong { font-size: 12px; }
 .activity-panel header button { width: 23px; height: 23px; padding: 0; border: 0; border-radius: 50%; background: #f3e3cd; color: #705950; cursor: pointer; }
+.panel-header-actions { display: flex; gap: 4px; }
+
+.emotion-form { display: grid; gap: 6px; margin-top: 10px; }
+.emotion-form textarea { width: 100%; min-height: 102px; padding: 9px 10px; resize: none; border: 1px solid #ead2b4; border-radius: 10px; outline: none; color: #55423d; background: #fffdf8; font: inherit; font-size: 10px; line-height: 1.55; }
+.emotion-form textarea:focus { border-color: #d69c55; box-shadow: 0 0 0 2px rgb(214 156 85 / 18%); }
+.emotion-help { margin: 0; color: #a08673; font-size: 8px; }
+.emotion-error { min-height: 12px; margin: 0; color: #a04d4d; font-size: 9px; }
+.emotion-send { justify-self: end; min-width: 76px; padding: 6px 10px; border: 0; border-radius: 9px; background: #72594d; color: #fffaf1; font-size: 9px; cursor: pointer; }
+.emotion-send:disabled { cursor: wait; opacity: .6; }
 
 .decision {
   min-height: 20px;

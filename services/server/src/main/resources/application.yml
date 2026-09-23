@@ -1,12 +1,24 @@
 server:
   address: 127.0.0.1
   port: 8080
+  servlet:
+    session:
+      cookie:
+        # Spring Session 默认名为 SESSION；显式沿用 JSESSIONID，确保升级前后的 Cookie 与退出清理行为一致。
+        name: JSESSIONID
+        http-only: true
+        same-site: lax
+        secure: ${AUTH_SECURE_COOKIES:false}
 
 spring:
   application:
     name: desktop-cat-server
   profiles:
     default: postgres
+  servlet:
+    multipart:
+      max-file-size: 2MB
+      max-request-size: 3MB
 
 logging:
   pattern:
@@ -20,3 +32,15 @@ management:
   endpoint:
     health:
       show-details: never
+
+desktop-cat:
+  auth:
+    # 正式环境必须通过环境变量提供稳定随机值，否则服务重启后 Web 登录记忆会失效。
+    remember-me-key: ${AUTH_REMEMBER_ME_KEY:desktop-cat-local-development-key-change-me}
+    secure-cookies: ${AUTH_SECURE_COOKIES:false}
+  photo:
+    # 数据库只保存相对路径；服务器迁移时可通过环境变量切换实际存储目录。
+    storage-root: ${PHOTO_STORAGE_ROOT:./data}
+  rag:
+    # Java 保留登录与数据权限，Python 服务只接收已经过用户隔离的候选正文。
+    service-url: ${RAG_SERVICE_URL:http://127.0.0.1:8090}
