@@ -26,14 +26,15 @@ async function logout() {
   <div class="app-shell" :class="{ 'auth-mode': authLayout }">
     <header v-if="!authLayout" class="site-header">
       <RouterLink class="brand" to="/" aria-label="猫的角落首页">
-        <span class="brand-mark" aria-hidden="true">☼</span>
+        <span class="brand-mark">🐾</span>
         <span>猫的角落</span>
       </RouterLink>
       <nav class="site-nav" aria-label="主要导航">
-        <RouterLink to="/">窗边</RouterLink>
+        <RouterLink to="/">首页</RouterLink>
         <RouterLink to="/records">我的记录</RouterLink>
         <RouterLink to="/knowledge">知识库</RouterLink>
-        <RouterLink to="/cottage">我的小屋</RouterLink>
+        <RouterLink to="/emotions">今天的内心</RouterLink>
+        <RouterLink to="/reminders">提醒</RouterLink>
         <RouterLink class="nav-action" to="/records/new">写下今天</RouterLink>
         <span v-if="auth.user" class="nav-user" :title="auth.user.username">{{ auth.user.username }}</span>
         <button class="nav-logout" type="button" :disabled="loggingOut" @click="logout">
@@ -47,8 +48,8 @@ async function logout() {
     </main>
 
     <footer v-if="!authLayout" class="site-footer">
-      <span>猫的角落 · 收藏平凡日子里的微光</span>
-      <span>日子慢慢，余晖暖暖。</span>
+      <span>不用一下子做完，今天也有一点点进展。</span>
+      <span>Vue 3 + Spring Boot 3 · 猫的角落</span>
     </footer>
   </div>
 </template>
