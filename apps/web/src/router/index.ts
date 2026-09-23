@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import HomeView from '../views/HomeView.vue'
+import CottageView from '../views/CottageView.vue'
 import RecordDetailView from '../views/RecordDetailView.vue'
 import RecordEditorView from '../views/RecordEditorView.vue'
 import RecordListView from '../views/RecordListView.vue'
@@ -20,6 +21,7 @@ export const router = createRouter({
     { path: '/register', name: 'register', component: RegisterView, meta: { guestOnly: true, layout: 'auth' } },
     { path: '/desktop/connect', name: 'desktop-connect', component: DesktopConnectView, meta: { requiresAuth: true, layout: 'auth' } },
     { path: '/', name: 'home', component: HomeView, meta: { requiresAuth: true } },
+    { path: '/cottage', name: 'cottage', component: CottageView, meta: { requiresAuth: true } },
     { path: '/records', name: 'records', component: RecordListView, meta: { requiresAuth: true } },
     { path: '/records/new', name: 'record-create', component: RecordEditorView, meta: { requiresAuth: true } },
     { path: '/records/:recordId', name: 'record-detail', component: RecordDetailView, meta: { requiresAuth: true } },

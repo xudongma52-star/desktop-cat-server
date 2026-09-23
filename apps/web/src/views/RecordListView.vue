@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue'
+import WritingActivityHeatmap from '../components/WritingActivityHeatmap.vue'
 import { RouterLink } from 'vue-router'
 import { ApiError, describeApiError } from '../api/http'
 import { deleteRecord, formatRecordDate, getRecords, recordTypeLabels } from '../api/records'
@@ -73,6 +74,7 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="records-page content-page">
+    <details class="activity-disclosure"><summary>我的写作足迹 · 展开年度回顾</summary><WritingActivityHeatmap /></details>
     <section class="page-heading">
       <div>
         <p class="eyebrow">MY STORIES</p>
