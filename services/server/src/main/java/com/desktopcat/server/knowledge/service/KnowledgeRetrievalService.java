@@ -67,10 +67,11 @@ public class KnowledgeRetrievalService {
                 .map(record -> new RagDocumentDto(
                         record.recordId(),
                         record.title(),
-                        truncateContent(record.content())))
+                        truncateContent(record.content()),
+                        record.version()))
                 .toList();
         RagRetrieveResponseDto response = ragServiceClient.retrieve(
-                new RagRetrieveRequestDto(question, TOP_K, documents));
+                new RagRetrieveRequestDto(userId, question, TOP_K, documents));
 
         List<KnowledgeMatchDto> matches = response.matches().stream()
                 .map(match -> toKnowledgeMatch(match, sourceRecords))

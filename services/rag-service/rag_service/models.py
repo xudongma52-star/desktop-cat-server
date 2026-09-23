@@ -9,9 +9,11 @@ class RagDocument(BaseModel):
     documentId: int = Field(gt=0)
     title: str | None = Field(default=None, max_length=120)
     content: str = Field(min_length=1, max_length=30_000)
+    version: int = Field(default=0, ge=0)
 
 
 class RagRetrieveRequest(BaseModel):
+    userId: int = Field(gt=0)
     question: str = Field(min_length=1, max_length=500)
     topK: int = Field(default=3, ge=1, le=5)
     documents: list[RagDocument] = Field(default_factory=list, max_length=100)

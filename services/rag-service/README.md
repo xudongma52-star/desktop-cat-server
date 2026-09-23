@@ -1,6 +1,6 @@
 # 知识检索服务
 
-这是“猫的角落”知识库使用的 Python 内部服务。它先把正文切成片段，使用中文字符级 TF-IDF 和余弦相似度返回最相关内容；配置火山方舟后，再让豆包仅根据这些片段生成带来源标记的回答。模型调用失败时仍然返回检索片段。
+这是“猫的角落”知识库使用的 Python 内部服务。它按当前用户和记录版本把允许检索的正文切片写入 PostgreSQL pgvector，使用 1536 维中文字符特征向量检索；配置火山方舟后，再让豆包仅根据这些片段生成带来源标记的回答。模型调用失败时仍然返回检索片段。
 
 ## 本地启动
 
@@ -9,6 +9,7 @@ cd services/rag-service
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
+$env:DATABASE_URL = 'postgresql://postgres:postgres@127.0.0.1:5432/postgres'
 python -m uvicorn rag_service.main:app --host 127.0.0.1 --port 8090
 ```
 
