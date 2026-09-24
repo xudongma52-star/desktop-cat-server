@@ -1,6 +1,6 @@
 # 知识检索服务
 
-这是“猫的角落”知识库使用的 Python 内部服务。它按当前用户和记录版本把允许检索的正文切片写入 PostgreSQL pgvector，使用 1536 维中文字符特征向量检索；配置火山方舟后，再让豆包仅根据这些片段生成带来源标记的回答。模型调用失败时仍然返回检索片段。
+这是“猫的角落”知识库使用的 Python 内部服务。它按当前用户和记录版本把允许检索的正文切片写入 PostgreSQL pgvector。配置火山方舟后，使用 1024 维 Doubao 语义向量检索，再让豆包仅根据命中的片段生成带来源标记的回答。向量模型不可用或片段尚未全部回填时，使用原有的 1536 维字符特征检索；回答模型失败时仍然返回检索片段。
 
 ## 本地启动
 
@@ -18,6 +18,7 @@ python -m uvicorn rag_service.main:app --host 127.0.0.1 --port 8090
 ```powershell
 $env:ARK_API_KEY = '只保存在本机或服务器，不提交到 Git'
 $env:ARK_MODEL = 'doubao-seed-2-1-turbo-260628'
+$env:ARK_EMBEDDING_MODEL = 'doubao-embedding-vision-251215'
 ```
 
 健康检查地址为 `http://127.0.0.1:8090/health`，接口文档地址为 `http://127.0.0.1:8090/docs`。
