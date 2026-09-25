@@ -14,7 +14,6 @@ import com.desktopcat.server.knowledge.dto.RagMatchDto;
 import com.desktopcat.server.knowledge.dto.RagRetrieveRequestDto;
 import com.desktopcat.server.knowledge.dto.RagRetrieveResponseDto;
 import com.desktopcat.server.knowledge.service.KnowledgeRetrievalService;
-import com.desktopcat.server.record.dto.PersonalRecordDetailDto;
 import com.desktopcat.server.record.dto.PersonalRecordListItemDto;
 import com.desktopcat.server.record.dto.PersonalRecordPageDto;
 import com.desktopcat.server.record.service.PersonalRecordService;
@@ -40,10 +39,8 @@ class KnowledgeRetrievalServiceTest {
     void sendsOnlyRagEnabledRecordsAndMapsTrustedSourceMetadata() {
         PersonalRecordListItemDto enabled = listItem(1L, true);
         PersonalRecordListItemDto disabled = listItem(2L, false);
-        PersonalRecordDetailDto detail = detail(1L, true, "晚上散步以后，我轻松了许多。");
         when(personalRecordService.listRecords(7L, 1, 100, null))
                 .thenReturn(new PersonalRecordPageDto(List.of(enabled, disabled), 1, 100, 2, 1));
-        when(personalRecordService.getRecord(7L, 1L)).thenReturn(detail);
         when(ragServiceClient.retrieve(any())).thenReturn(
                 new RagRetrieveResponseDto(List.of(
                         new RagMatchDto(1L, "散步以后，我轻松了许多。", 0.72),
@@ -65,9 +62,31 @@ class KnowledgeRetrievalServiceTest {
                 ArgumentCaptor.forClass(RagRetrieveRequestDto.class);
         verify(ragServiceClient).retrieve(requestCaptor.capture());
         assertThat(requestCaptor.getValue().question()).isEqualTo("如何放松？");
-        assertThat(requestCaptor.getValue().documents()).hasSize(1);
-        assertThat(requestCaptor.getValue().documents().getFirst().documentId()).isEqualTo(1L);
+        assertThat(requestCaptor.getValue().documentIds()).containsExactly(1L);
         verify(personalRecordService, never()).getRecord(7L, 2L);
+    }
+
+    @Test
+    void includesEnabledRecordBeyondFirstHundredEntries() {
+        List<PersonalRecordListItemDto> firstPage = java.util.stream.LongStream.rangeClosed(1, 100)
+                .mapToObj(id -> listItem(id, false))
+                .toList();
+        when(personalRecordService.listRecords(7L, 1, 100, null))
+                .thenReturn(new PersonalRecordPageDto(firstPage, 1, 100, 101, 2));
+        when(personalRecordService.listRecords(7L, 2, 100, null))
+                .thenReturn(new PersonalRecordPageDto(List.of(listItem(101L, true)), 2, 100, 101, 2));
+        when(ragServiceClient.retrieve(any())).thenReturn(
+                new RagRetrieveResponseDto(List.of(new RagMatchDto(101L, "较早的记录", 0.8)), null, false));
+
+        var result = service.retrieve(7L, new KnowledgeRetrieveRequestDto("以前写过什么？"));
+
+        assertThat(result.searchableRecordCount()).isEqualTo(1);
+        assertThat(result.candidateLimitReached()).isFalse();
+        assertThat(result.matches()).hasSize(1);
+        ArgumentCaptor<RagRetrieveRequestDto> requestCaptor =
+                ArgumentCaptor.forClass(RagRetrieveRequestDto.class);
+        verify(ragServiceClient).retrieve(requestCaptor.capture());
+        assertThat(requestCaptor.getValue().documentIds()).containsExactly(101L);
     }
 
     @Test
@@ -97,9 +116,4 @@ class KnowledgeRetrievalServiceTest {
                 false, ragEnabled, 0, Instant.EPOCH, Instant.EPOCH);
     }
 
-    private PersonalRecordDetailDto detail(long id, boolean ragEnabled, String content) {
-        return new PersonalRecordDetailDto(
-                id, "DIARY", "一天", content, LocalDate.of(2026, 9, 22), null,
-                false, ragEnabled, 0, Instant.EPOCH, Instant.EPOCH);
-    }
 }

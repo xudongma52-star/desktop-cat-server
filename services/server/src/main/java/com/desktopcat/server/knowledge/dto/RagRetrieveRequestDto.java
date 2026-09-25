@@ -7,5 +7,5 @@ public record RagRetrieveRequestDto(
         long userId,
         String question,
         int topK,
-        List<RagDocumentDto> documents) {
+        List<Long> documentIds) {
 }

@@ -95,10 +95,6 @@ function scoreLabel(score: number): string {
         <span>本次检索了 {{ result.searchableRecordCount }} 篇记录</span>
       </header>
 
-      <p v-if="result.candidateLimitReached" class="knowledge-limit-note">
-        第一版优先检索最近 100 篇记录，更早的内容会在后续索引版本中加入。
-      </p>
-
       <article v-if="result.answerGenerated && result.answer" class="knowledge-answer">
         <p class="eyebrow">CAT'S ANSWER</p>
         <h3>小猫从记录里找到了这些</h3>

@@ -1,3 +1,5 @@
+from typing import Annotated
+
 from pydantic import BaseModel, Field, field_validator
 
 
@@ -16,7 +18,7 @@ class RagRetrieveRequest(BaseModel):
     userId: int = Field(gt=0)
     question: str = Field(min_length=1, max_length=500)
     topK: int = Field(default=3, ge=1, le=5)
-    documents: list[RagDocument] = Field(default_factory=list, max_length=100)
+    documentIds: list[Annotated[int, Field(gt=0)]] = Field(default_factory=list)
 
     @field_validator("question")
     @classmethod

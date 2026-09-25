@@ -19,7 +19,7 @@ def health() -> HealthResponse:
 
 @app.post("/internal/rag/retrieve", response_model=RagRetrieveResponse)
 def retrieve_knowledge(request: RagRetrieveRequest) -> RagRetrieveResponse:
-    matches = retrieve_indexed(request.userId, request.question, request.documents, request.topK)
+    matches = retrieve_indexed(request.userId, request.question, request.documentIds, request.topK)
     answer = generate_answer(request.question, matches)
     return RagRetrieveResponse(
         matches=matches,

@@ -11,7 +11,7 @@ import os
 import psycopg
 
 from .embedding_client import embed_text, model_name
-from .models import RagDocument, RagMatch
+from .models import RagMatch
 from .retrieval import split_text, tokenize
 
 
@@ -33,21 +33,20 @@ def _embedding(text: str) -> str:
 
 
 def retrieve_indexed(
-    user_id: int, question: str, documents: list[RagDocument], top_k: int
+    user_id: int, question: str, document_ids: list[int], top_k: int
 ) -> list[RagMatch]:
-    lexical_matches = _retrieve_lexical(user_id, question, documents, top_k)
-    if not documents:
+    lexical_matches = _retrieve_lexical(user_id, question, document_ids, top_k)
+    if not document_ids:
         return lexical_matches
     semantic_matches = _retrieve_semantic(
-        user_id, question, [document.documentId for document in documents], top_k
+        user_id, question, document_ids, top_k
     )
     return semantic_matches if semantic_matches is not None else lexical_matches
 
 
 def _retrieve_lexical(
-    user_id: int, question: str, documents: list[RagDocument], top_k: int
+    user_id: int, question: str, ids: list[int], top_k: int
 ) -> list[RagMatch]:
-    ids = [document.documentId for document in documents]
     if not ids:
         return []
 

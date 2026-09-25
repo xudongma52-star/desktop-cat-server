@@ -4,11 +4,9 @@ import com.desktopcat.server.knowledge.client.RagServiceClient;
 import com.desktopcat.server.knowledge.dto.KnowledgeMatchDto;
 import com.desktopcat.server.knowledge.dto.KnowledgeRetrieveRequestDto;
 import com.desktopcat.server.knowledge.dto.KnowledgeSearchResultDto;
-import com.desktopcat.server.knowledge.dto.RagDocumentDto;
 import com.desktopcat.server.knowledge.dto.RagMatchDto;
 import com.desktopcat.server.knowledge.dto.RagRetrieveRequestDto;
 import com.desktopcat.server.knowledge.dto.RagRetrieveResponseDto;
-import com.desktopcat.server.record.dto.PersonalRecordDetailDto;
 import com.desktopcat.server.record.dto.PersonalRecordListItemDto;
 import com.desktopcat.server.record.dto.PersonalRecordPageDto;
 import com.desktopcat.server.record.service.PersonalRecordService;
@@ -25,8 +23,7 @@ import org.springframework.web.server.ResponseStatusException;
 @Profile("postgres")
 public class KnowledgeRetrievalService {
     private static final int MAX_QUESTION_LENGTH = 500;
-    private static final int MAX_CANDIDATE_RECORDS = 100;
-    private static final int MAX_CONTENT_CODE_POINTS = 30_000;
+    private static final int PAGE_SIZE = 100;
     private static final int TOP_K = 5;
 
     private final PersonalRecordService personalRecordService;
@@ -42,36 +39,31 @@ public class KnowledgeRetrievalService {
     public KnowledgeSearchResultDto retrieve(
             long userId, KnowledgeRetrieveRequestDto request) {
         String question = validateQuestion(request);
-        PersonalRecordPageDto page = personalRecordService.listRecords(
-                userId, 1, MAX_CANDIDATE_RECORDS, null);
-
-        Map<Long, PersonalRecordDetailDto> sourceRecords = new LinkedHashMap<>();
-        for (PersonalRecordListItemDto item : page.items()) {
-            if (!item.ragEnabled()) {
-                continue;
+        Map<Long, PersonalRecordListItemDto> sourceRecords = new LinkedHashMap<>();
+        int pageNumber = 1;
+        while (true) {
+            PersonalRecordPageDto page = personalRecordService.listRecords(
+                    userId, pageNumber, PAGE_SIZE, null);
+            for (PersonalRecordListItemDto item : page.items()) {
+                if (item.ragEnabled()) {
+                    sourceRecords.put(item.recordId(), item);
+                }
             }
-            PersonalRecordDetailDto detail = personalRecordService.getRecord(userId, item.recordId());
-            // 编辑和检索并发时以详情接口读到的最新开关为准。
-            if (detail.ragEnabled()) {
-                sourceRecords.put(detail.recordId(), detail);
+            if (pageNumber >= page.totalPages()) {
+                break;
             }
+            pageNumber++;
         }
 
-        boolean candidateLimitReached = page.total() > MAX_CANDIDATE_RECORDS;
         if (sourceRecords.isEmpty()) {
             return new KnowledgeSearchResultDto(
-                    0, candidateLimitReached, null, false, List.of());
+                    0, false, null, false, List.of());
         }
 
-        List<RagDocumentDto> documents = sourceRecords.values().stream()
-                .map(record -> new RagDocumentDto(
-                        record.recordId(),
-                        record.title(),
-                        truncateContent(record.content()),
-                        record.version()))
-                .toList();
+        // Python 从数据库读取当前版本和正文；内部请求只传 ID，避免重复传输所有文章。
         RagRetrieveResponseDto response = ragServiceClient.retrieve(
-                new RagRetrieveRequestDto(userId, question, TOP_K, documents));
+                new RagRetrieveRequestDto(userId, question, TOP_K,
+                        List.copyOf(sourceRecords.keySet())));
 
         List<KnowledgeMatchDto> matches = response.matches().stream()
                 .map(match -> toKnowledgeMatch(match, sourceRecords))
@@ -79,7 +71,7 @@ public class KnowledgeRetrievalService {
                 .toList();
         return new KnowledgeSearchResultDto(
                 sourceRecords.size(),
-                candidateLimitReached,
+                false,
                 normalizeAnswer(response.answer(), response.answerGenerated(), matches),
                 response.answerGenerated()
                         && response.answer() != null
@@ -102,16 +94,9 @@ public class KnowledgeRetrievalService {
         return question;
     }
 
-    private String truncateContent(String content) {
-        if (content.codePointCount(0, content.length()) <= MAX_CONTENT_CODE_POINTS) {
-            return content;
-        }
-        return content.substring(0, content.offsetByCodePoints(0, MAX_CONTENT_CODE_POINTS));
-    }
-
     private KnowledgeMatchDto toKnowledgeMatch(
-            RagMatchDto match, Map<Long, PersonalRecordDetailDto> sourceRecords) {
-        PersonalRecordDetailDto source = sourceRecords.get(match.documentId());
+            RagMatchDto match, Map<Long, PersonalRecordListItemDto> sourceRecords) {
+        PersonalRecordListItemDto source = sourceRecords.get(match.documentId());
         if (source == null || match.content() == null || match.content().isBlank()) {
             return null;
         }
