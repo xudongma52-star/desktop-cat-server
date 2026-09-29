@@ -7,7 +7,7 @@ import type {
 } from '../../shared/cat-activity'
 import type { CompanionInfo } from '../../shared/companion'
 import type { CatProfile } from '../../shared/cat-profile'
-import type { Emotion } from '../../shared/emotion'
+import type { CaptureImageInput, CaptureSaveStatus } from '../../shared/capture'
 import type { Reminder } from '../../shared/reminder'
 
 declare global {
@@ -19,7 +19,7 @@ declare global {
     getActivity(): Promise<CatActivitySnapshot>
     getCompanionInfo(): Promise<CompanionInfo>
     getCatProfile(): Promise<CatProfile>
-    createEmotion(content: string): Promise<Emotion>
+    createCapture(content: string, image?: CaptureImageInput): Promise<CaptureSaveStatus>
     completeReminder(reminderId: number, version: number): Promise<Reminder>
     requestActivity(activityId: CatActivityId): Promise<CatActivityRequestResult>
     onActivityChanged(listener: (snapshot: CatActivitySnapshot) => void): () => void

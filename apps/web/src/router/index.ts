@@ -10,6 +10,7 @@ import LoginView from '../views/LoginView.vue'
 import RegisterView from '../views/RegisterView.vue'
 import DesktopConnectView from '../views/DesktopConnectView.vue'
 import KnowledgeView from '../views/KnowledgeView.vue'
+import CaptureListView from '../views/CaptureListView.vue'
 import { pinia } from '../stores'
 import { useAuthStore } from '../stores/auth'
 
@@ -23,6 +24,7 @@ export const router = createRouter({
     { path: '/', name: 'home', component: HomeView, meta: { requiresAuth: true } },
     { path: '/cottage', name: 'cottage', component: CottageView, meta: { requiresAuth: true } },
     { path: '/records', name: 'records', component: RecordListView, meta: { requiresAuth: true } },
+    { path: '/captures', name: 'captures', component: CaptureListView, meta: { requiresAuth: true } },
     { path: '/records/new', name: 'record-create', component: RecordEditorView, meta: { requiresAuth: true } },
     { path: '/records/:recordId', name: 'record-detail', component: RecordDetailView, meta: { requiresAuth: true } },
     { path: '/records/:recordId/edit', name: 'record-edit', component: RecordEditorView, meta: { requiresAuth: true } },

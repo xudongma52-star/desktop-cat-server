@@ -44,12 +44,27 @@ const activityPanelSide = ref<'left' | 'right'>('right')
 const isRequestingActivity = ref(false)
 const decisionKind = ref<'none' | 'accepted' | 'refused' | 'error'>('none')
 const decisionMessage = ref(`选一个活动，看看${catName.value}愿不愿意。`)
-const EMOTION_DRAFT_KEY = 'desktop-cat:emotion-draft'
-const isEmotionInputOpen = ref(false)
-const isSavingEmotion = ref(false)
-const emotionDraft = ref(window.localStorage.getItem(EMOTION_DRAFT_KEY) ?? '')
-const emotionError = ref('')
-const emotionInput = ref<HTMLTextAreaElement | null>(null)
+const CAPTURE_DRAFT_KEY = 'desktop-cat:capture-draft'
+const LEGACY_EMOTION_DRAFT_KEY = 'desktop-cat:emotion-draft'
+const MAX_CAPTURE_IMAGE_BYTES = 10 * 1024 * 1024
+const CAPTURE_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp'])
+function restoreCaptureDraft(): string {
+  const current = window.localStorage.getItem(CAPTURE_DRAFT_KEY)
+  if (current !== null) return current
+  const legacy = window.localStorage.getItem(LEGACY_EMOTION_DRAFT_KEY)
+  if (legacy) {
+    window.localStorage.setItem(CAPTURE_DRAFT_KEY, legacy)
+    window.localStorage.removeItem(LEGACY_EMOTION_DRAFT_KEY)
+  }
+  return legacy ?? ''
+}
+const isCaptureInputOpen = ref(false)
+const isSavingCapture = ref(false)
+const captureDraft = ref(restoreCaptureDraft())
+const captureImage = ref<File | null>(null)
+const captureImagePreview = ref<string | null>(null)
+const captureError = ref('')
+const captureInput = ref<HTMLTextAreaElement | null>(null)
 const dueReminder = ref<Reminder | null>(null)
 const isCompletingReminder = ref(false)
 
@@ -183,45 +198,81 @@ function syncMovementPause(): void {
   window.desktopCat.setMovementPaused(isActivityMenuOpen.value || isDragging.value)
 }
 
-watch(emotionDraft, (value) => {
-  if (value) window.localStorage.setItem(EMOTION_DRAFT_KEY, value)
-  else window.localStorage.removeItem(EMOTION_DRAFT_KEY)
+watch(captureDraft, (value) => {
+  if (value) window.localStorage.setItem(CAPTURE_DRAFT_KEY, value)
+  else window.localStorage.removeItem(CAPTURE_DRAFT_KEY)
 })
 
-async function openEmotionInput(): Promise<void> {
-  emotionError.value = ''
-  isEmotionInputOpen.value = true
-  await nextTick()
-  emotionInput.value?.focus()
+function setCaptureImage(file: File | null): void {
+  if (captureImagePreview.value) URL.revokeObjectURL(captureImagePreview.value)
+  captureImage.value = file
+  captureImagePreview.value = file ? URL.createObjectURL(file) : null
 }
 
-function handleEmotionKeydown(event: KeyboardEvent): void {
+function handleCapturePaste(event: ClipboardEvent): void {
+  const image = Array.from(event.clipboardData?.files ?? [])
+    .find((file) => CAPTURE_IMAGE_TYPES.has(file.type))
+  if (image) setCaptureImage(image)
+}
+
+function handleCaptureDrop(event: DragEvent): void {
+  const image = Array.from(event.dataTransfer?.files ?? [])
+    .find((file) => CAPTURE_IMAGE_TYPES.has(file.type))
+  if (image) setCaptureImage(image)
+}
+
+function handleCaptureImageSelection(event: Event): void {
+  const input = event.target as HTMLInputElement
+  setCaptureImage(input.files?.[0] ?? null)
+  input.value = ''
+}
+
+async function openCaptureInput(): Promise<void> {
+  captureError.value = ''
+  isCaptureInputOpen.value = true
+  await nextTick()
+  captureInput.value?.focus()
+}
+
+function handleCaptureKeydown(event: KeyboardEvent): void {
   if (event.key !== 'Enter' || event.shiftKey || event.isComposing) return
   event.preventDefault()
-  void submitEmotion()
+  void submitCapture()
 }
 
-async function submitEmotion(): Promise<void> {
-  if (isSavingEmotion.value) return
-  const content = emotionDraft.value.trim()
-  if (!content) {
-    emotionError.value = '写点什么再告诉我吧。'
+async function submitCapture(): Promise<void> {
+  if (isSavingCapture.value) return
+  const content = captureDraft.value
+  if (!content.trim() && !captureImage.value) {
+    captureError.value = '写点文字或选择一张图片。'
+    return
+  }
+  if (captureImage.value && !CAPTURE_IMAGE_TYPES.has(captureImage.value.type)) {
+    captureError.value = '请选择 PNG、JPEG 或 WebP 图片。'
+    return
+  }
+  if (captureImage.value && captureImage.value.size > MAX_CAPTURE_IMAGE_BYTES) {
+    captureError.value = '图片不能超过 10 MB。'
     return
   }
 
-  isSavingEmotion.value = true
-  emotionError.value = ''
+  isSavingCapture.value = true
+  captureError.value = ''
   try {
-    await window.desktopCat.createEmotion(content)
-    emotionDraft.value = ''
-    isEmotionInputOpen.value = false
+    const image = captureImage.value
+      ? { name: captureImage.value.name || 'capture.png', type: captureImage.value.type,
+          bytes: new Uint8Array(await captureImage.value.arrayBuffer()) } : undefined
+    const status = await window.desktopCat.createCapture(content, image)
+    captureDraft.value = ''
+    setCaptureImage(null)
+    isCaptureInputOpen.value = false
     await setActivityMenuOpen(false)
-    showTemporaryMessage('记下了。', 3_600)
+    showTemporaryMessage(status === 'saved' ? '记下了，网站里也能找到。' : '已留在本机，联网后会同步。', 5_000)
   } catch (error) {
-    console.error('Failed to save the emotion.', error)
-    emotionError.value = '刚才没有保存成功，内容还在这里。'
+    console.error('Failed to keep the capture.', error)
+    captureError.value = '刚才没有记下，内容还在这里。'
   } finally {
-    isSavingEmotion.value = false
+    isSavingCapture.value = false
   }
 }
 
@@ -265,7 +316,7 @@ async function setActivityMenuOpen(open: boolean): Promise<void> {
     decisionMessage.value = `选一个活动，看看${catName.value}愿不愿意。`
     setMousePassThrough(false)
   } else {
-    isEmotionInputOpen.value = false
+    isCaptureInputOpen.value = false
     isActivityMenuOpen.value = false
     await window.desktopCat.setActivityPanelOpen(false)
   }
@@ -392,6 +443,7 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  if (captureImagePreview.value) URL.revokeObjectURL(captureImagePreview.value)
   window.removeEventListener('mousemove', handleMouseMove)
   window.removeEventListener('mouseleave', handleMouseLeave)
   removeActivityListener?.()
@@ -456,28 +508,31 @@ onBeforeUnmount(() => {
       <div v-if="activity.id === 'eating'" class="activity-mark treat-mark" aria-hidden="true">♡</div>
     </div>
 
-    <section v-if="isActivityMenuOpen" class="activity-panel" data-interactive :aria-label="isEmotionInputOpen ? `告诉${catName}一件事` : `选择${catName}的活动`">
+    <section v-if="isActivityMenuOpen" class="activity-panel" data-interactive :aria-label="isCaptureInputOpen ? `让${catName}记下一件事` : `选择${catName}的活动`">
       <header>
-        <strong>{{ isEmotionInputOpen ? '想说什么就说吧' : `你想让${catName}干什么？` }}</strong>
+        <strong>{{ isCaptureInputOpen ? '想到什么，就记下什么' : `你想让${catName}干什么？` }}</strong>
         <span class="panel-header-actions">
-          <button v-if="!isEmotionInputOpen" type="button" title="跟小猫说句话" aria-label="跟小猫说句话" @click="openEmotionInput">✎</button>
+          <button v-if="!isCaptureInputOpen" type="button" title="随手记下" aria-label="随手记下" @click="openCaptureInput">✎</button>
           <button type="button" aria-label="关闭面板" @click="void setActivityMenuOpen(false)">×</button>
         </span>
       </header>
 
-      <form v-if="isEmotionInputOpen" class="emotion-form" @submit.prevent="submitEmotion">
+      <form v-if="isCaptureInputOpen" class="capture-form" :class="{ 'with-image': !!captureImage }" @submit.prevent="submitCapture" @dragover.prevent @drop.prevent="handleCaptureDrop">
         <textarea
-          ref="emotionInput"
-          v-model="emotionDraft"
-          rows="5"
+          ref="captureInput"
+          v-model="captureDraft"
+          :rows="captureImage ? 3 : 5"
           placeholder="不用整理，想到什么就说什么……"
-          :disabled="isSavingEmotion"
-          @keydown="handleEmotionKeydown"
+          :disabled="isSavingCapture"
+          @keydown="handleCaptureKeydown"
+          @paste="handleCapturePaste"
         ></textarea>
-        <p class="emotion-help">Enter 发送 · Shift + Enter 换行</p>
-        <p v-if="emotionError" class="emotion-error" role="alert">{{ emotionError }}</p>
-        <button class="emotion-send" type="submit" :disabled="isSavingEmotion">
-          {{ isSavingEmotion ? '正在记下…' : '告诉小猫' }}
+        <label class="capture-image-picker">添加图片<input type="file" accept="image/png,image/jpeg,image/webp" :disabled="isSavingCapture" @change="handleCaptureImageSelection" /></label>
+        <div v-if="captureImagePreview" class="capture-image-preview"><img :src="captureImagePreview" alt="待保存图片预览" /><button type="button" :disabled="isSavingCapture" @click="setCaptureImage(null)">移除</button></div>
+        <p class="capture-help">Enter 记下 · Shift + Enter 换行</p>
+        <p v-if="captureError" class="capture-error" role="alert">{{ captureError }}</p>
+        <button class="capture-send" type="submit" :disabled="isSavingCapture">
+          {{ isSavingCapture ? '正在记下…' : '记下' }}
         </button>
       </form>
 
@@ -724,13 +779,19 @@ onBeforeUnmount(() => {
 .activity-panel header button { width: 23px; height: 23px; padding: 0; border: 0; border-radius: 50%; background: #f3e3cd; color: #705950; cursor: pointer; }
 .panel-header-actions { display: flex; gap: 4px; }
 
-.emotion-form { display: grid; gap: 6px; margin-top: 10px; }
-.emotion-form textarea { width: 100%; min-height: 102px; padding: 9px 10px; resize: none; border: 1px solid #ead2b4; border-radius: 10px; outline: none; color: #55423d; background: #fffdf8; font: inherit; font-size: 10px; line-height: 1.55; }
-.emotion-form textarea:focus { border-color: #d69c55; box-shadow: 0 0 0 2px rgb(214 156 85 / 18%); }
-.emotion-help { margin: 0; color: #a08673; font-size: 8px; }
-.emotion-error { min-height: 12px; margin: 0; color: #a04d4d; font-size: 9px; }
-.emotion-send { justify-self: end; min-width: 76px; padding: 6px 10px; border: 0; border-radius: 9px; background: #72594d; color: #fffaf1; font-size: 9px; cursor: pointer; }
-.emotion-send:disabled { cursor: wait; opacity: .6; }
+.capture-form { display: grid; gap: 6px; margin-top: 10px; }
+.capture-image-picker { display: flex; align-items: center; gap: 5px; font-size: 9px; }
+.capture-image-picker input { max-width: 180px; font-size: 8px; }
+.capture-image-preview { display: flex; align-items: center; gap: 6px; }
+.capture-image-preview img { max-width: 70px; max-height: 38px; object-fit: contain; }
+.capture-image-preview button { font-size: 8px; }
+.capture-form textarea { width: 100%; min-height: 102px; padding: 9px 10px; resize: none; border: 1px solid #ead2b4; border-radius: 10px; outline: none; color: #55423d; background: #fffdf8; font: inherit; font-size: 10px; line-height: 1.55; }
+.capture-form.with-image textarea { min-height: 62px; }
+.capture-form textarea:focus { border-color: #d69c55; box-shadow: 0 0 0 2px rgb(214 156 85 / 18%); }
+.capture-help { margin: 0; color: #a08673; font-size: 8px; }
+.capture-error { min-height: 12px; margin: 0; color: #a04d4d; font-size: 9px; }
+.capture-send { justify-self: end; min-width: 76px; padding: 6px 10px; border: 0; border-radius: 9px; background: #72594d; color: #fffaf1; font-size: 9px; cursor: pointer; }
+.capture-send:disabled { cursor: wait; opacity: .6; }
 
 .decision {
   min-height: 20px;

@@ -1,5 +1,5 @@
-import { createHash, randomBytes } from 'node:crypto'
-import { existsSync, mkdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
+import { createHash, randomBytes, randomUUID } from 'node:crypto'
+import { existsSync, mkdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { hostname } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -28,7 +28,7 @@ import {
 } from '../shared/cat-activity'
 import type { CompanionInfo } from '../shared/companion'
 import type { CatProfile } from '../shared/cat-profile'
-import type { Emotion } from '../shared/emotion'
+import type { CaptureImageInput, CaptureSaveStatus, PendingCapture } from '../shared/capture'
 import type { Reminder } from '../shared/reminder'
 
 const COMPACT_WINDOW_WIDTH = 176
@@ -51,7 +51,7 @@ const DESKTOP_REFRESH_API_URL = `${ASSISTANT_API_URL}/api/auth/desktop/refresh`
 const DESKTOP_REVOKE_API_URL = `${ASSISTANT_API_URL}/api/auth/desktop/revoke`
 const CAT_PROFILE_API_URL = `${ASSISTANT_API_URL}/api/cat/profile`
 const ASSISTANT_EVENTS_API_URL = `${ASSISTANT_API_URL}/api/events`
-const EMOTIONS_API_URL = `${ASSISTANT_API_URL}/api/emotions`
+const CAPTURES_API_URL = `${ASSISTANT_API_URL}/api/captures`
 const REMINDERS_API_URL = `${ASSISTANT_API_URL}/api/reminders`
 const REMINDER_SYNC_INTERVAL_MS = 5 * 60_000
 const REMINDER_DUE_CHECK_INTERVAL_MS = 5_000
@@ -70,7 +70,8 @@ type ServerEvent = { event: string; data: string }
 type CatProfileUpdatedEvent = { profileId: number; version: number }
 type ReminderChangedEvent = { reminderId: number; version: number; action: string }
 type ReminderCache = { reminders: Reminder[]; notifiedTokens: string[] }
-type StoredAuthState = { encryptedCredential: string }
+type StoredAuthState = { encryptedCredential: string; userId: number }
+type StoredCaptureQueue = { encryptedEntries: string }
 type DesktopTokenResponse = {
   accessToken: string
   accessTokenExpiresAt: string
@@ -111,7 +112,13 @@ let deviceCredential: string | undefined
 let accessToken: string | undefined
 let accessTokenExpiresAt = 0
 let authenticatedUsername: string | undefined
+let authenticatedUserId: number | undefined
 let authenticationInFlight: Promise<string> | undefined
+let captureQueue: PendingCapture[] = []
+let captureQueueUnavailable = false
+let captureSyncInFlight: Promise<void> | undefined
+let captureSyncTimer: NodeJS.Timeout | undefined
+let captureSyncFailed = false
 
 let currentActivity: CatActivitySnapshot = {
   id: 'idle',
@@ -141,6 +148,10 @@ function getAuthStatePath(): string {
   return join(app.getPath('userData'), 'auth-state.json')
 }
 
+function getCaptureQueuePath(): string {
+  return join(app.getPath('userData'), 'capture-queue.json')
+}
+
 function loadDeviceCredential(): void {
   const authStatePath = getAuthStatePath()
   if (!existsSync(authStatePath) || !safeStorage.isEncryptionAvailable()) return
@@ -150,6 +161,9 @@ function loadDeviceCredential(): void {
     if (typeof state.encryptedCredential !== 'string' || !state.encryptedCredential) return
     const credential = safeStorage.decryptString(Buffer.from(state.encryptedCredential, 'base64'))
     if (credential.includes('.')) deviceCredential = credential
+    if (Number.isSafeInteger(state.userId) && (state.userId ?? 0) > 0) {
+      authenticatedUserId = state.userId
+    }
   } catch (error) {
     console.warn('Failed to restore the desktop authentication state.', error)
   }
@@ -164,6 +178,7 @@ function saveDeviceCredential(credential: string): void {
   mkdirSync(dirname(authStatePath), { recursive: true })
   const state: StoredAuthState = {
     encryptedCredential: safeStorage.encryptString(credential).toString('base64'),
+    userId: authenticatedUserId ?? 0,
   }
   writeFileSync(authStatePath, JSON.stringify(state, null, 2), 'utf8')
   deviceCredential = credential
@@ -174,6 +189,7 @@ function clearDeviceCredential(): void {
   accessToken = undefined
   accessTokenExpiresAt = 0
   authenticatedUsername = undefined
+  authenticatedUserId = undefined
   const authStatePath = getAuthStatePath()
   try {
     if (existsSync(authStatePath)) unlinkSync(authStatePath)
@@ -227,7 +243,11 @@ function acceptTokenResponse(response: DesktopTokenResponse): string {
   accessToken = response.accessToken
   accessTokenExpiresAt = Date.parse(response.accessTokenExpiresAt)
   authenticatedUsername = response.username
-  if (response.deviceCredential) saveDeviceCredential(response.deviceCredential)
+  authenticatedUserId = response.userId
+  if (response.deviceCredential || deviceCredential) {
+    saveDeviceCredential(response.deviceCredential ?? deviceCredential!)
+  }
+  void syncCaptureQueue()
   updateTrayMenu()
   if (!wasAuthenticated && (profileReconcileTimer || reminderSyncTimer)) {
     reconnectProfileEvents()
@@ -402,15 +422,6 @@ function isCatProfile(value: unknown): value is CatProfile {
     && typeof candidate.updatedAt === 'string'
 }
 
-function isEmotion(value: unknown): value is Emotion {
-  if (!value || typeof value !== 'object') return false
-  const candidate = value as Partial<Emotion>
-  return Number.isSafeInteger(candidate.emotionId) && (candidate.emotionId ?? 0) > 0
-    && typeof candidate.content === 'string' && candidate.content.trim().length > 0
-    && typeof candidate.recordDate === 'string'
-    && typeof candidate.createdAt === 'string'
-}
-
 function isReminder(value: unknown): value is Reminder {
   if (!value || typeof value !== 'object') return false
   const candidate = value as Partial<Reminder>
@@ -542,17 +553,114 @@ function resumeReminderSync(): void {
   void syncReminders()
 }
 
-async function createEmotion(content: string): Promise<Emotion> {
-  const response = await authenticatedFetch(EMOTIONS_API_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ content }),
-    signal: AbortSignal.timeout(5_000),
-  }, true)
-  if (!response.ok) throw new Error(`Emotion request returned HTTP ${response.status}.`)
-  const candidate: unknown = await response.json()
-  if (!isEmotion(candidate)) throw new Error('Emotion response is invalid.')
-  return candidate
+function loadCaptureQueue(): void {
+  const path = getCaptureQueuePath()
+  if (!existsSync(path)) return
+  try {
+    if (!safeStorage.isEncryptionAvailable()) throw new Error('Secure storage is unavailable.')
+    const stored = JSON.parse(readFileSync(path, 'utf8')) as Partial<StoredCaptureQueue>
+    if (typeof stored.encryptedEntries !== 'string') throw new Error('Capture queue is invalid.')
+    const decoded: unknown = JSON.parse(safeStorage.decryptString(
+      Buffer.from(stored.encryptedEntries, 'base64')))
+    if (!Array.isArray(decoded) || !decoded.every((entry) =>
+      typeof entry.captureId === 'string'
+      && Number.isSafeInteger(entry.userId) && entry.userId > 0
+      && typeof entry.content === 'string'
+      && typeof entry.capturedAt === 'string'
+      && (entry.image === undefined || (typeof entry.image?.name === 'string'
+        && typeof entry.image?.type === 'string'
+        && typeof entry.image?.base64 === 'string')))) {
+      throw new Error('Capture queue is invalid.')
+    }
+    captureQueue = decoded as PendingCapture[]
+  } catch (error) {
+    // 读取失败时禁止覆盖旧文件，让用户输入仍保留在渲染进程草稿中。
+    captureQueueUnavailable = true
+    console.error('Failed to read the pending capture queue.', error)
+  }
+}
+
+function saveCaptureQueue(): void {
+  if (captureQueueUnavailable || !safeStorage.isEncryptionAvailable()) {
+    throw new Error('Pending capture storage is unavailable.')
+  }
+  const path = getCaptureQueuePath()
+  const temporary = `${path}.tmp`
+  mkdirSync(dirname(path), { recursive: true })
+  const stored: StoredCaptureQueue = {
+    encryptedEntries: safeStorage.encryptString(JSON.stringify(captureQueue)).toString('base64'),
+  }
+  writeFileSync(temporary, JSON.stringify(stored), 'utf8')
+  renameSync(temporary, path)
+}
+
+async function syncCaptureQueue(): Promise<void> {
+  if (captureSyncInFlight) return captureSyncInFlight
+  if (!authenticatedUserId || captureQueueUnavailable || !captureQueue.some(
+    (entry) => entry.userId === authenticatedUserId)) return
+
+  captureSyncInFlight = (async () => {
+    for (const entry of [...captureQueue]) {
+      if (entry.userId !== authenticatedUserId) continue
+      try {
+        const metadata = {
+          captureId: entry.captureId,
+          content: entry.content,
+          capturedAt: entry.capturedAt,
+        }
+        let body: string | FormData = JSON.stringify(metadata)
+        const headers: Record<string, string> = {}
+        if (entry.image) {
+          const form = new FormData()
+          form.append('capture', new Blob([JSON.stringify(metadata)], { type: 'application/json' }))
+          form.append('image', new Blob([Buffer.from(entry.image.base64, 'base64')],
+            { type: entry.image.type }), entry.image.name)
+          body = form
+        } else {
+          headers['Content-Type'] = 'application/json'
+        }
+        const response = await authenticatedFetch(CAPTURES_API_URL, {
+          method: 'POST', headers, body,
+          signal: AbortSignal.timeout(entry.image ? 120_000 : 15_000),
+        })
+        if (!response.ok) throw new Error(`Capture request returned HTTP ${response.status}.`)
+        const saved = await response.json() as { captureId?: string }
+        if (saved.captureId !== entry.captureId) throw new Error('Capture response is invalid.')
+        const index = captureQueue.findIndex((candidate) => candidate.captureId === entry.captureId)
+        if (index >= 0) {
+          const [removed] = captureQueue.splice(index, 1)
+          try { saveCaptureQueue() }
+          catch (error) { captureQueue.splice(index, 0, removed); throw error }
+        }
+        captureSyncFailed = false
+      } catch (error) {
+        if (!captureSyncFailed) console.warn('Capture synchronization is unavailable; keeping the local queue.', error)
+        captureSyncFailed = true
+        break
+      }
+    }
+  })()
+  try { await captureSyncInFlight }
+  finally { captureSyncInFlight = undefined }
+}
+
+async function createCapture(content: string, image?: CaptureImageInput): Promise<CaptureSaveStatus> {
+  if (!authenticatedUserId) await ensureAccessToken(true)
+  if (!authenticatedUserId) throw new Error('Desktop authentication is required.')
+  const entry: PendingCapture = {
+    captureId: randomUUID(),
+    userId: authenticatedUserId,
+    content,
+    capturedAt: new Date().toISOString(),
+    image: image ? { name: image.name, type: image.type,
+      base64: Buffer.from(image.bytes).toString('base64') } : undefined,
+  }
+  captureQueue.push(entry)
+  try { saveCaptureQueue() }
+  catch (error) { captureQueue.pop(); throw error }
+  await syncCaptureQueue()
+  return captureQueue.some((candidate) => candidate.captureId === entry.captureId)
+    ? 'pending' : 'saved'
 }
 
 function loadCatProfile(): void {
@@ -1358,12 +1466,21 @@ function registerIpcHandlers(): void {
     return catProfile
   })
 
-  ipcMain.handle('desktop-cat:create-emotion', (event, content: unknown) => {
-    if (!isSenderCatWindow(event.sender)) throw new Error('Emotion access denied.')
-    if (typeof content !== 'string' || content.trim().length === 0) {
-      throw new Error('Emotion content is required.')
+  ipcMain.handle('desktop-cat:create-capture', (event, content: unknown, image: unknown) => {
+    if (!isSenderCatWindow(event.sender)) throw new Error('Capture access denied.')
+    if (typeof content !== 'string' || (content.trim().length === 0 && image == null)) {
+      throw new Error('Capture content or image is required.')
     }
-    return createEmotion(content.trim())
+    if (Array.from(content).length > 20_000) throw new Error('Capture content is too long.')
+    if (image != null && (typeof image !== 'object'
+      || typeof (image as CaptureImageInput).name !== 'string'
+      || typeof (image as CaptureImageInput).type !== 'string'
+      || !((image as CaptureImageInput).bytes instanceof Uint8Array)
+      || (image as CaptureImageInput).bytes.length === 0
+      || (image as CaptureImageInput).bytes.length > 10 * 1024 * 1024)) {
+      throw new Error('Capture image is invalid.')
+    }
+    return createCapture(content, image as CaptureImageInput | undefined)
   })
 
   ipcMain.handle('desktop-cat:complete-reminder', (event, reminderId: unknown, version: unknown) => {
@@ -1394,6 +1511,7 @@ if (!hasSingleInstanceLock) {
     app.setAppUserModelId('com.desktopcat.corner')
     registerIpcHandlers()
     loadDeviceCredential()
+    loadCaptureQueue()
     loadCompanionState()
     loadCatProfile()
     loadReminderCache()
@@ -1405,8 +1523,11 @@ if (!hasSingleInstanceLock) {
     })
     startCatProfileSync()
     startReminderSync()
+    void syncCaptureQueue()
+    captureSyncTimer = setInterval(() => void syncCaptureQueue(), 30_000)
     powerMonitor.on('resume', reconnectProfileEvents)
     powerMonitor.on('resume', resumeReminderSync)
+    powerMonitor.on('resume', syncCaptureQueue)
     screen.on('display-removed', () => ensureWindowIsVisible())
     screen.on('display-metrics-changed', () => ensureWindowIsVisible())
   })
@@ -1419,9 +1540,11 @@ app.on('before-quit', () => {
   if (profileEventReconnectTimer) clearTimeout(profileEventReconnectTimer)
   if (reminderSyncTimer) clearInterval(reminderSyncTimer)
   if (reminderDueCheckTimer) clearInterval(reminderDueCheckTimer)
+  if (captureSyncTimer) clearInterval(captureSyncTimer)
   profileEventAbortController?.abort()
   powerMonitor.removeListener('resume', reconnectProfileEvents)
   powerMonitor.removeListener('resume', resumeReminderSync)
+  powerMonitor.removeListener('resume', syncCaptureQueue)
   clearActivityEndTimer()
   stopMovement()
   saveWindowPosition()

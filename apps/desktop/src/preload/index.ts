@@ -6,7 +6,7 @@ import type {
 } from '../shared/cat-activity'
 import type { CompanionInfo } from '../shared/companion'
 import type { CatProfile } from '../shared/cat-profile'
-import type { Emotion } from '../shared/emotion'
+import type { CaptureImageInput, CaptureSaveStatus } from '../shared/capture'
 import type { Reminder } from '../shared/reminder'
 
 const desktopCatApi = {
@@ -31,8 +31,8 @@ const desktopCatApi = {
   getCatProfile(): Promise<CatProfile> {
     return ipcRenderer.invoke('desktop-cat:get-profile') as Promise<CatProfile>
   },
-  createEmotion(content: string): Promise<Emotion> {
-    return ipcRenderer.invoke('desktop-cat:create-emotion', content) as Promise<Emotion>
+  createCapture(content: string, image?: CaptureImageInput): Promise<CaptureSaveStatus> {
+    return ipcRenderer.invoke('desktop-cat:create-capture', content, image) as Promise<CaptureSaveStatus>
   },
   completeReminder(reminderId: number, version: number): Promise<Reminder> {
     return ipcRenderer.invoke('desktop-cat:complete-reminder', reminderId, version) as Promise<Reminder>

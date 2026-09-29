@@ -17,7 +17,8 @@ Vue 3 + Electron + Spring Boot 3 + JDK 21 + Python 3.12，使用原生 MyBatis�
 - 已完成 `personal_record` 文章表和完整 CRUD：可管理日记、心得与实习笔记，按类型筛选和分页，并分别设置是否加入温馨回忆、是否允许进入知识检索。
 - 文章和每日情绪均按当前登录用户隔离；历史数据迁移时会归入既有 `MaxCat` 账号，避免升级后成为无主数据。
 - 首页写作足迹按日期统计最近 365 天的日记篇数，显示 53 周热力图、累计篇数和写作天数；统计直接聚合现有 `personal_record` 数据，不建立冗余统计表。
-- 已完成 `daily_emotion` 每日情绪表：可从桌面小猫的单一文本框快速记录一句话，并在网站按日期追溯当天和过去的内容。创建日期始终由 Java 按上海时区当天生成，不能补写过去或预写明天；情绪碎片与文章分开保存，不要求选择情绪类型，也不触发即时 AI 回复。
+- 已完成 `daily_emotion` 每日情绪表：网站可按日期追溯当天和过去的内容。创建日期始终由 Java 按上海时区当天生成，不能补写过去或预写明天；现有情绪数据和接口保留。
+- 已完成 `capture_item` 随手记录：桌面小猫的单一文本框和网站 `/captures` 页面可保存文字、单张原图或两者，无需标题或分类；桌面端断网时加密暂存并在恢复连接后重试，网站可搜索、修改文字、查看原图和删除。客户端 UUID 用于重试去重，AI 整理留待下一阶段。
 - 已完成 `reminder` 待办提醒表和网站管理页：可创建、修改、完成和删除一次性提醒，并查看今天或全部未完成事项。提醒变更通过 SSE 实时同步到网页和桌面猫，每 5 分钟低频校准一次；桌面猫每 5 秒在本地检查到期时间，断网时继续使用缓存，到点会出现并喵一声，可直接标记完成。
 - 已完成可追溯的知识问答：Java 分页收集当前用户所有主动开启 `rag_enabled` 的记录 ID，Python 按当前记录版本读取正文并将切片存入 pgvector；语义向量检索返回最多 5 个相关片段，再由豆包根据命中片段生成带来源编号的回答。向量模型不可用时自动降级为字符特征检索，不影响来源查看。
 - 首页文章温馨回忆轮播会读取主动开启 `recall_enabled` 的记录，支持上一条、下一条、暂停和自动轮播；目前只包含文字文章。
@@ -144,7 +145,7 @@ RecordEditorView.vue
 
 照片回忆由 `PhotoCarousel.vue` 在浏览器内完成选择、4:3 裁剪和 WebP 编码，再通过 `POST /api/carousel/photos` 上传。`PhotoServiceImpl` 负责当前用户校验与数据库事务，`PhotoStorageService` 负责文件校验和落盘；列表、内容读取和逻辑删除均同时限定当前用户，不能访问其他账号的照片。
 
-每日情绪的写入链路为 Electron 渲染进程 → preload 受限 API → Electron 主进程 → `POST /api/emotions` → Java 分层 → PostgreSQL。主进程负责网络请求，渲染进程不直接访问数据库。网站的 `/emotions` 页面通过 `GET /api/emotions` 读取当天内容。
+随手记录的写入链路为 Electron 渲染进程 → preload 受限 API → Electron 主进程的本地加密队列 → `POST /api/captures` → Java 分层 → PostgreSQL。图片原文件写入与轮播照片分开的 `captures` 子目录，不强制裁剪；数据库仅保存相对路径。主进程负责网络请求，渲染进程不直接访问数据库。网站的 `/captures` 页面可保存和管理记录；原有 `/emotions` 页面仍可查询历史情绪。
 
 提醒的管理链路为 `ReminderView.vue` → `/api/reminders` → `ReminderController` → `ReminderService` 接口 → `ReminderServiceImpl` → `ReminderDao` + `ReminderDao.xml` → PostgreSQL。桌面端主进程读取 `scope=PENDING`，把未完成提醒缓存到用户目录并把到期事项发送给渲染进程；用户点击“我做完了”后由主进程调用完成接口。
 
@@ -176,6 +177,12 @@ RecordEditorView.vue
 | `DELETE /api/carousel/photos/{photoId}` | 将当前用户的照片移出轮播 |
 | `POST /api/emotions` | 保存一条当天情绪 |
 | `GET /api/emotions?date=2026-09-16` | 按日期查询情绪；不传日期时查询今天 |
+| `POST /api/captures` | JSON 保存文字，或 multipart 保存文字与单张原图；客户端 UUID 支持重试去重 |
+| `GET /api/captures?page=1&pageSize=20&q=` | 分页和全文子串搜索当前用户的记录 |
+| `GET /api/captures/{captureId}` | 查看一条原始记录 |
+| `GET /api/captures/{captureId}/image` | 读取当前用户保存的原图 |
+| `PUT /api/captures/{captureId}` | 按版本修改文字 |
+| `DELETE /api/captures/{captureId}?version=` | 按版本逻辑删除记录 |
 | `POST /api/reminders` | 创建一次性提醒 |
 | `GET /api/reminders?scope=TODAY` | 查询今天的提醒；`PENDING` 查询全部未完成提醒 |
 | `PUT /api/reminders/{reminderId}` | 按版本修改未完成提醒 |
@@ -272,9 +279,9 @@ $env:PHOTO_STORAGE_ROOT = 'D:\repository\services\server\data'
 .\mvnw.cmd spring-boot:run
 ```
 
-`PHOTO_STORAGE_ROOT` 可省略，默认使用后端工作目录下的 `./data`；该目录保存照片原文件，不应提交到 Git，部署和迁移时需要与 PostgreSQL 数据一起备份。当前本地 Redis 未启用认证并且只监听宿主机回环地址。若将 Redis 暴露到其他机器或部署到服务器，必须先由项目维护者定义 Redis 账号密码，再补充安全连接配置；不得把正式凭据提交到仓库。服务器部署时还必须通过环境变量提供真实数据库密码和稳定随机的 `AUTH_REMEMBER_ME_KEY`，HTTPS 部署同时设置 `AUTH_SECURE_COOKIES=true`。
+`PHOTO_STORAGE_ROOT` 可省略，默认使用后端工作目录下的 `./data`；该目录保存轮播照片与随手记录的原图，不应提交到 Git，部署和迁移时需要与 PostgreSQL 数据一起备份。当前本地 Redis 未启用认证并且只监听宿主机回环地址。若将 Redis 暴露到其他机器或部署到服务器，必须先由项目维护者定义 Redis 账号密码，再补充安全连接配置；不得把正式凭据提交到仓库。服务器部署时还必须通过环境变量提供真实数据库密码和稳定随机的 `AUTH_REMEMBER_ME_KEY`，HTTPS 部署同时设置 `AUTH_SECURE_COOKIES=true`。
 
-应用首次启动时，Flyway 会在目标数据库创建 `flyway_schema_history`、`cat_profile`、`personal_record`、`daily_emotion`、`reminder`、`app_user`、`auth_device` 和 `photo`；业务主键使用带含义的字段，不使用裸 `id`。V1 创建小猫资料，V2 创建文章记录，V3 创建每日情绪及日期时间索引，V4 创建待办提醒及有效提醒索引，V5 创建用户表及唯一用户名约束，V6 创建设备授权表及有效设备索引，V7 创建图片记录及回忆索引，V8 为文章和每日情绪补充用户归属及按用户查询索引。
+应用首次启动时，Flyway 会在目标数据库创建 `flyway_schema_history`、`cat_profile`、`personal_record`、`daily_emotion`、`reminder`、`app_user`、`auth_device`、`photo` 和 `capture_item`；业务主键使用带含义的字段，不使用裸 `id`。V1 创建小猫资料，V2 创建文章记录，V3 创建每日情绪及日期时间索引，V4 创建待办提醒及有效提醒索引，V5 创建用户表及唯一用户名约束，V6 创建设备授权表及有效设备索引，V7 创建图片记录及回忆索引，V8 为文章和每日情绪补充用户归属及按用户查询索引，V11 创建随手记录，V12 增加单张原图相对路径。
 
 需要临时使用不连接数据库的内存模式时：
 

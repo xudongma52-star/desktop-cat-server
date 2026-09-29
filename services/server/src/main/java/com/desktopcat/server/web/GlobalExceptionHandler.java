@@ -92,6 +92,24 @@ public class GlobalExceptionHandler {
             Map.entry("Personal record has been updated. Refresh and try again.",
                     "PERSONAL_RECORD_VERSION_CONFLICT"),
             Map.entry("Personal record could not be created.", "PERSONAL_RECORD_CREATE_FAILED"),
+            Map.entry("Capture id is required.", "CAPTURE_ID_REQUIRED"),
+            Map.entry("Capture id is invalid.", "CAPTURE_ID_INVALID"),
+            Map.entry("Capture id has already been used.", "CAPTURE_ID_CONFLICT"),
+            Map.entry("Capture content is required.", "CAPTURE_CONTENT_REQUIRED"),
+            Map.entry("Capture content must not exceed 20000 characters.", "CAPTURE_CONTENT_TOO_LONG"),
+            Map.entry("Capture time is required.", "CAPTURE_TIME_REQUIRED"),
+            Map.entry("Capture version is required.", "CAPTURE_VERSION_REQUIRED"),
+            Map.entry("Capture version must not be negative.", "CAPTURE_VERSION_INVALID"),
+            Map.entry("Capture version must be a number.", "CAPTURE_VERSION_INVALID"),
+            Map.entry("Capture was not found.", "CAPTURE_NOT_FOUND"),
+            Map.entry("Capture has been updated. Refresh and try again.", "CAPTURE_VERSION_CONFLICT"),
+            Map.entry("Capture image is required.", "CAPTURE_IMAGE_REQUIRED"),
+            Map.entry("Capture image is invalid.", "CAPTURE_IMAGE_INVALID"),
+            Map.entry("Capture image was not found.", "CAPTURE_IMAGE_NOT_FOUND"),
+            Map.entry("Capture image could not be stored.", "CAPTURE_IMAGE_STORAGE_FAILED"),
+            Map.entry("Capture image file is unavailable.", "CAPTURE_IMAGE_UNAVAILABLE"),
+            Map.entry("Page size must be between 1 and 50.", "PAGE_SIZE_INVALID"),
+            Map.entry("Search query must not exceed 100 characters.", "CAPTURE_QUERY_TOO_LONG"),
             Map.entry("Question is required.", "KNOWLEDGE_QUESTION_REQUIRED"),
             Map.entry("Question must not exceed 500 characters.", "KNOWLEDGE_QUESTION_TOO_LONG"),
             Map.entry("Knowledge retrieval service is unavailable.",
@@ -152,6 +170,8 @@ public class GlobalExceptionHandler {
             case "reminderId" -> "Reminder id must be a number.";
             case "version" -> request.getRequestURI().startsWith("/api/reminders")
                     ? "Reminder version must be a number."
+                    : request.getRequestURI().startsWith("/api/captures")
+                    ? "Capture version must be a number."
                     : "Record version must be a number.";
             case "page" -> "Page must be a number.";
             case "pageSize" -> "Page size must be a number.";
@@ -166,6 +186,10 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(MaxUploadSizeExceededException.class)
     public ResponseEntity<ApiErrorResponse> handleUploadTooLarge(HttpServletRequest request) {
+        if (request.getRequestURI().startsWith("/api/captures")) {
+            return build(HttpStatus.PAYLOAD_TOO_LARGE, "CAPTURE_IMAGE_TOO_LARGE",
+                    "Capture image exceeds the upload limit.", request);
+        }
         return build(HttpStatus.PAYLOAD_TOO_LARGE, "PHOTO_FILE_TOO_LARGE",
                 "Photo file must not exceed 2 MB.", request);
     }
