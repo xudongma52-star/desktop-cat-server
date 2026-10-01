@@ -18,6 +18,34 @@ export interface KnowledgeSearchResult {
   matches: KnowledgeMatch[]
 }
 
+export interface KnowledgeChatSummary {
+  chatId: number
+  title: string
+  version: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface KnowledgeMessage {
+  messageId: number
+  role: 'USER' | 'ASSISTANT'
+  content: string
+  sources: KnowledgeMatch[]
+  createdAt: string
+}
+
+export interface KnowledgeMessagePage {
+  items: KnowledgeMessage[]
+  hasMore: boolean
+  nextBeforeMessageId: number | null
+}
+
+export interface KnowledgeChatResponse {
+  chat: KnowledgeChatSummary
+  userMessage: KnowledgeMessage
+  assistantMessage: KnowledgeMessage
+}
+
 export async function retrieveKnowledge(question: string): Promise<KnowledgeSearchResult> {
   const timeoutController = new AbortController()
   const timeoutId = window.setTimeout(() => timeoutController.abort(), 130_000)
@@ -26,6 +54,47 @@ export async function retrieveKnowledge(question: string): Promise<KnowledgeSear
     return apiRequest<KnowledgeSearchResult>('/api/knowledge/retrieve', {
       method: 'POST',
       body: JSON.stringify({ question }),
+      signal: timeoutController.signal,
+    })
+  } finally {
+    window.clearTimeout(timeoutId)
+  }
+}
+
+export function listKnowledgeChats(): Promise<KnowledgeChatSummary[]> {
+  return apiRequest<KnowledgeChatSummary[]>('/api/knowledge/chats')
+}
+
+export function renameKnowledgeChat(chatId: number, title: string): Promise<KnowledgeChatSummary> {
+  return apiRequest<KnowledgeChatSummary>(`/api/knowledge/chats/${chatId}/title`, {
+    method: 'PATCH',
+    body: JSON.stringify({ title }),
+  })
+}
+
+export function deleteKnowledgeChat(chatId: number): Promise<void> {
+  return apiRequest<void>(`/api/knowledge/chats/${chatId}`, { method: 'DELETE' })
+}
+
+export function listKnowledgeMessages(
+  chatId: number,
+  beforeMessageId?: number | null,
+): Promise<KnowledgeMessagePage> {
+  const query = beforeMessageId ? `?beforeMessageId=${beforeMessageId}` : ''
+  return apiRequest<KnowledgeMessagePage>(`/api/knowledge/chats/${chatId}/messages${query}`)
+}
+
+export async function sendKnowledgeChat(
+  chatId: number | null,
+  question: string,
+): Promise<KnowledgeChatResponse> {
+  const timeoutController = new AbortController()
+  const timeoutId = window.setTimeout(() => timeoutController.abort(), 130_000)
+
+  try {
+    return apiRequest<KnowledgeChatResponse>('/api/knowledge/chat', {
+      method: 'POST',
+      body: JSON.stringify({ chatId, question }),
       signal: timeoutController.signal,
     })
   } finally {

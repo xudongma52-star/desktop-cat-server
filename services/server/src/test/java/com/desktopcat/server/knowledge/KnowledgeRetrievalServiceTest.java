@@ -10,6 +10,7 @@ import static org.mockito.Mockito.when;
 
 import com.desktopcat.server.knowledge.client.RagServiceClient;
 import com.desktopcat.server.knowledge.dto.KnowledgeRetrieveRequestDto;
+import com.desktopcat.server.knowledge.dto.RagConversationMessageDto;
 import com.desktopcat.server.knowledge.dto.RagMatchDto;
 import com.desktopcat.server.knowledge.dto.RagRetrieveRequestDto;
 import com.desktopcat.server.knowledge.dto.RagRetrieveResponseDto;
@@ -87,6 +88,28 @@ class KnowledgeRetrievalServiceTest {
                 ArgumentCaptor.forClass(RagRetrieveRequestDto.class);
         verify(ragServiceClient).retrieve(requestCaptor.capture());
         assertThat(requestCaptor.getValue().documentIds()).containsExactly(101L);
+    }
+
+    @Test
+    void forwardsConversationHistoryToPython() {
+        when(personalRecordService.listRecords(7L, 1, 100, null))
+                .thenReturn(new PersonalRecordPageDto(
+                        List.of(listItem(1L, true)), 1, 100, 1, 1));
+        when(ragServiceClient.retrieve(any())).thenReturn(
+                new RagRetrieveResponseDto(
+                        List.of(new RagMatchDto(1L, "后来重新安排了计划。", 0.8)),
+                        "你后来重新安排了计划。[1]", true));
+        List<RagConversationMessageDto> history = List.of(
+                new RagConversationMessageDto("USER", "之前遇到了什么困难？"),
+                new RagConversationMessageDto("ASSISTANT", "项目曾经延期。"));
+
+        service.retrieve(
+                7L, new KnowledgeRetrieveRequestDto("那后来呢？"), history);
+
+        ArgumentCaptor<RagRetrieveRequestDto> requestCaptor =
+                ArgumentCaptor.forClass(RagRetrieveRequestDto.class);
+        verify(ragServiceClient).retrieve(requestCaptor.capture());
+        assertThat(requestCaptor.getValue().history()).isEqualTo(history);
     }
 
     @Test

@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.desktopcat.server.knowledge.dao.KnowledgeMessageDao">
+  <sql id="columns">
+    message.message_id,
+    message.chat_id,
+    message.role,
+    message.content,
+    message.sources::text AS sources_json,
+    message.created_at
+  </sql>
+
+  <insert id="insertMessage" parameterType="com.desktopcat.server.knowledge.dao.KnowledgeMessageDO"
+          useGeneratedKeys="true" keyProperty="messageId" keyColumn="message_id">
+    INSERT INTO knowledge_message (
+      chat_id, role, content, sources, created_at
+    ) VALUES (
+      #{chatId}, #{role}, #{content}, CAST(#{sourcesJson} AS JSONB), #{createdAt}
+    )
+  </insert>
+
+  <select id="selectRecentByChat" resultType="com.desktopcat.server.knowledge.dao.KnowledgeMessageDO">
+    SELECT <include refid="columns"/>
+    FROM knowledge_message message
+    INNER JOIN knowledge_chat chat ON chat.chat_id = message.chat_id
+    WHERE message.chat_id = #{chatId}
+      AND chat.user_id = #{userId}
+      AND chat.deleted_at IS NULL
+    <if test="beforeMessageId != null">
+      AND message.message_id <![CDATA[<]]> #{beforeMessageId}
+    </if>
+    ORDER BY message.message_id DESC
+    LIMIT #{limit}
+  </select>
+</mapper>

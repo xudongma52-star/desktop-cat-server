@@ -1,7 +1,11 @@
 from fastapi import FastAPI
 
-from .llm import generate_answer
-from .models import HealthResponse, RagRetrieveRequest, RagRetrieveResponse
+from .llm import build_retrieval_question, generate_answer
+from .models import (
+    HealthResponse,
+    RagRetrieveRequest,
+    RagRetrieveResponse,
+)
 from .vector_store import retrieve_indexed
 
 
@@ -19,8 +23,11 @@ def health() -> HealthResponse:
 
 @app.post("/internal/rag/retrieve", response_model=RagRetrieveResponse)
 def retrieve_knowledge(request: RagRetrieveRequest) -> RagRetrieveResponse:
-    matches = retrieve_indexed(request.userId, request.question, request.documentIds, request.topK)
-    answer = generate_answer(request.question, matches)
+    retrieval_question = build_retrieval_question(request.question, request.history)
+    matches = retrieve_indexed(
+        request.userId, retrieval_question, request.documentIds, request.topK
+    )
+    answer = generate_answer(request.question, matches, request.history)
     return RagRetrieveResponse(
         matches=matches,
         answer=answer,

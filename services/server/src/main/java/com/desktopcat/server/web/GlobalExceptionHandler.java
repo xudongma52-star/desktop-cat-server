@@ -114,6 +114,15 @@ public class GlobalExceptionHandler {
             Map.entry("Question must not exceed 500 characters.", "KNOWLEDGE_QUESTION_TOO_LONG"),
             Map.entry("Knowledge retrieval service is unavailable.",
                     "KNOWLEDGE_RETRIEVAL_SERVICE_UNAVAILABLE"),
+            Map.entry("Chat id must be positive.", "KNOWLEDGE_CHAT_ID_INVALID"),
+            Map.entry("Chat title is required.", "KNOWLEDGE_CHAT_TITLE_REQUIRED"),
+            Map.entry("Chat title must not exceed 80 characters.", "KNOWLEDGE_CHAT_TITLE_TOO_LONG"),
+            Map.entry("Before message id must be positive.", "KNOWLEDGE_MESSAGE_ID_INVALID"),
+            Map.entry("Knowledge chat was not found.", "KNOWLEDGE_CHAT_NOT_FOUND"),
+            Map.entry("Knowledge chat has been updated. Refresh and try again.",
+                    "KNOWLEDGE_CHAT_VERSION_CONFLICT"),
+            Map.entry("Knowledge chat could not be created.", "KNOWLEDGE_CHAT_CREATE_FAILED"),
+            Map.entry("Knowledge message could not be created.", "KNOWLEDGE_MESSAGE_CREATE_FAILED"),
             Map.entry("Emotion content is required.", "EMOTION_CONTENT_REQUIRED"),
             Map.entry("Emotion could not be created.", "EMOTION_CREATE_FAILED"),
             Map.entry("Emotion date is invalid.", "EMOTION_DATE_INVALID"),
@@ -165,6 +174,8 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiErrorResponse> handleTypeMismatch(
             MethodArgumentTypeMismatchException exception, HttpServletRequest request) {
         String message = switch (exception.getName()) {
+            case "chatId" -> "Chat id must be positive.";
+            case "beforeMessageId" -> "Before message id must be positive.";
             case "photoId" -> "Photo id must be a number.";
             case "recordId" -> "Record id must be a number.";
             case "reminderId" -> "Reminder id must be a number.";

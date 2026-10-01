@@ -7,5 +7,14 @@ public record RagRetrieveRequestDto(
         long userId,
         String question,
         int topK,
-        List<Long> documentIds) {
+        List<Long> documentIds,
+        List<RagConversationMessageDto> history) {
+
+    public RagRetrieveRequestDto(
+            long userId,
+            String question,
+            int topK,
+            List<Long> documentIds) {
+        this(userId, question, topK, documentIds, List.of());
+    }
 }

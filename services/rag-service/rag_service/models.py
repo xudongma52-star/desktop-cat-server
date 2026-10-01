@@ -14,11 +14,24 @@ class RagDocument(BaseModel):
     version: int = Field(default=0, ge=0)
 
 
+class RagConversationMessage(BaseModel):
+    role: str
+    content: str = Field(min_length=1, max_length=10_000)
+
+    @field_validator("role")
+    @classmethod
+    def validate_role(cls, value: str) -> str:
+        if value not in {"USER", "ASSISTANT"}:
+            raise ValueError("role must be USER or ASSISTANT")
+        return value
+
+
 class RagRetrieveRequest(BaseModel):
     userId: int = Field(gt=0)
     question: str = Field(min_length=1, max_length=500)
     topK: int = Field(default=3, ge=1, le=5)
     documentIds: list[Annotated[int, Field(gt=0)]] = Field(default_factory=list)
+    history: list[RagConversationMessage] = Field(default_factory=list, max_length=100)
 
     @field_validator("question")
     @classmethod

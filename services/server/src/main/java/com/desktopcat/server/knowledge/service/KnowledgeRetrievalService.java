@@ -5,6 +5,7 @@ import com.desktopcat.server.knowledge.dto.KnowledgeMatchDto;
 import com.desktopcat.server.knowledge.dto.KnowledgeRetrieveRequestDto;
 import com.desktopcat.server.knowledge.dto.KnowledgeSearchResultDto;
 import com.desktopcat.server.knowledge.dto.RagMatchDto;
+import com.desktopcat.server.knowledge.dto.RagConversationMessageDto;
 import com.desktopcat.server.knowledge.dto.RagRetrieveRequestDto;
 import com.desktopcat.server.knowledge.dto.RagRetrieveResponseDto;
 import com.desktopcat.server.record.dto.PersonalRecordListItemDto;
@@ -38,7 +39,17 @@ public class KnowledgeRetrievalService {
 
     public KnowledgeSearchResultDto retrieve(
             long userId, KnowledgeRetrieveRequestDto request) {
+        return retrieve(userId, request, List.of());
+    }
+
+    public KnowledgeSearchResultDto retrieve(
+            long userId,
+            KnowledgeRetrieveRequestDto request,
+            List<RagConversationMessageDto> history) {
         String question = validateQuestion(request);
+        List<RagConversationMessageDto> normalizedHistory = history == null
+                ? List.of()
+                : List.copyOf(history);
         Map<Long, PersonalRecordListItemDto> sourceRecords = new LinkedHashMap<>();
         int pageNumber = 1;
         while (true) {
@@ -63,7 +74,7 @@ public class KnowledgeRetrievalService {
         // Python 从数据库读取当前版本和正文；内部请求只传 ID，避免重复传输所有文章。
         RagRetrieveResponseDto response = ragServiceClient.retrieve(
                 new RagRetrieveRequestDto(userId, question, TOP_K,
-                        List.copyOf(sourceRecords.keySet())));
+                        List.copyOf(sourceRecords.keySet()), normalizedHistory));
 
         List<KnowledgeMatchDto> matches = response.matches().stream()
                 .map(match -> toKnowledgeMatch(match, sourceRecords))
