@@ -135,7 +135,7 @@ onBeforeUnmount(() => {
   <section class="writing-activity" aria-labelledby="writing-activity-title">
     <div class="activity-heading">
       <div>
-        <p class="eyebrow">WRITING ACTIVITY</p>
+        <p class="eyebrow">日常 · 记录</p>
         <h2 id="writing-activity-title">写作足迹</h2>
         <p class="activity-description">每一个亮起的格子，都是你认真记录过的一天。</p>
       </div>

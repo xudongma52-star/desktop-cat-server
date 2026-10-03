@@ -1,0 +1,235 @@
+html { scrollbar-gutter: stable; }
+body:has(.corner-app) { min-width: 0; background: #e9e6de; }
+/* 视觉层独立于业务逻辑；导航更换外观时继续使用原有路由和登录行为。 */
+.corner-app {
+  --corner-ink: #333731; --corner-muted: #7a7c71; --ink: #333731; --muted: #7a7c71;
+  --green: #41473e; --green-dark: #2d342a; --paper: #f4f2ec; --line: #d3d1c7;
+  width: 100%; padding-inline: clamp(24px, 6vw, 108px); position: relative; isolation: isolate;
+  background: #e9e6de; color: var(--corner-ink);
+}
+.corner-atmosphere { position: fixed; inset: 0; z-index: -3; pointer-events: none; background: color-mix(in srgb, #e9e6de calc((1 - var(--corner-night, 0)) * 100%), #20251f); }
+.corner-atmosphere::after { content: ''; position: absolute; inset: 0; background: linear-gradient(120deg, transparent 25%, #fffdf52b 46%, transparent 72%); opacity: calc(1 - var(--corner-night, 0)); }
+/* 程序生成的静态颗粒，不使用位图或图片序列。 */
+.corner-surface { position: fixed; z-index: 1; inset: 0; opacity: .045; pointer-events: none; mix-blend-mode: multiply; }
+.corner-scene { position: fixed; inset: 0; z-index: -1; pointer-events: none; }
+.corner-scene canvas { display: block; width: 100%; height: 100%; }
+.corner-scene-fallback { position: absolute; width: min(34vw, 450px); right: 10%; top: 22%; fill: none; stroke: #aaa797; stroke-width: 1.2; }
+.corner-header { position: sticky; top: 0; background: #e9e6de; z-index: 4; display: flex; align-items: center; justify-content: space-between; gap: 32px; min-height: 106px; border-bottom: 1px solid #777b6e30; color: #343931; }
+.corner-brand { display: flex; align-items: center; gap: 14px; font-size: 18px; font-weight: 500; letter-spacing: .12em; white-space: nowrap; }
+.corner-brand > .corner-brand-mark { width: 48px; height: auto; }
+/* 原始 JPG 只通过视口裁边与实时透明映射呈现，不输出新图或重画图形。 */
+.corner-brand-mark { display: block; width: 100%; height: auto; overflow: hidden; }
+.corner-navigation-brand { display: flex; align-items: center; gap: 14px; }
+.corner-navigation-brand > .corner-brand-mark { width: 48px; filter: invert(1); }
+.corner-navigation-brand > span { font-size: 18px; letter-spacing: .12em; }
+.corner-navigation-brand > span > span { display: block; margin-top: 6px; font-size: 9px; letter-spacing: .22em; color: #b8bdac; }
+.corner-brand-note { display: block; margin-top: 6px; font-size: 9px; letter-spacing: .22em; color: #7e8176; }
+.corner-header-actions { display: flex; align-items: center; gap: 42px; margin-left: auto; font-size: 12px; }
+.corner-return { margin-left: 32px; color: #777c6f; font-size: 12px; }
+.corner-write-link { display: flex; align-items: center; gap: 22px; padding: 12px 0; }
+.corner-write-link:hover, .corner-return:hover { color: #8d7156; }
+.corner-menu-toggle { display: flex; align-items: center; gap: 15px; min-height: 44px; padding: 9px 0 9px 10px; border-radius: 0; background: transparent; color: inherit; font-size: 12px; letter-spacing: .08em; }
+.corner-menu-toggle:hover { background: transparent; color: #8d7156; }
+.corner-menu-toggle svg { width: 23px; height: 23px; fill: none; stroke: currentColor; stroke-width: 1; }
+.corner-app .site-main { position: relative; z-index: 2; }
+.corner-app .site-footer { position: relative; z-index: 2; max-width: 1172px; width: 100%; margin-inline: auto; color: #7d8175; }
+.corner-intro { position: relative; min-height: calc(100svh - 106px); display: flex; align-items: center; padding: 65px 0 130px; }
+.corner-intro-copy { position: relative; width: 62%; z-index: 2; }
+.corner-kicker { display: flex; align-items: center; gap: 14px; margin: 0 0 34px; color: #71776a; font-size: 11px; letter-spacing: .16em; }
+.corner-kicker > span { width: 28px; height: 1px; background: #969b89; }
+.corner-intro h1, .corner-menu-title, .corner-app .records-page h1 { font-family: 'Songti SC', 'Noto Serif SC', 'SimSun', serif; font-weight: 400; }
+.corner-intro h1 { font-size: clamp(42px, 5.15vw, 86px); line-height: 1.52; letter-spacing: -.065em; }
+.corner-title-line { display: block; overflow: hidden; perspective: 900px; }
+.corner-title-text { display: block; backface-visibility: hidden; }
+.corner-title-line:last-child { color: #69705f; }
+.corner-intro-description { margin: 26px 0 0; color: #7d8175; font-size: 13px; line-height: 2; letter-spacing: .03em; }
+.corner-intro-actions { display: flex; align-items: center; gap: 36px; margin-top: 39px; }
+.corner-primary-action { display: flex; align-items: center; justify-content: space-between; gap: 48px; padding: 17px 24px; border: 1px solid #414939; border-radius: 2px; background: #414939; color: #f4f4eb; font-size: 12px; letter-spacing: .04em; }
+.corner-primary-action:hover { background: #303629; border-color: #303629; }
+.corner-text-action { display: flex; align-items: center; gap: 24px; padding: 11px 0; border-bottom: 1px solid #9ca08f; color: #5f6754; font-size: 12px; }
+.corner-text-action:hover { color: #343931; border-color: #343931; }
+.corner-companion-caption { position: absolute; right: 8%; bottom: 14%; margin: 0; color: #848476; font-size: 10px; letter-spacing: .08em; }
+.corner-companion-caption span { margin-right: 12px; color: #646b5b; }
+.corner-intro-footer { position: absolute; bottom: 31px; inset-inline: 0; display: flex; justify-content: space-between; align-items: center; gap: 16px; color: #8c8e81; font-size: 10px; letter-spacing: .07em; }
+.corner-intro-footer > a { display: flex; align-items: center; gap: 18px; min-height: 44px; color: #636a59; }
+.corner-home-sections { position: relative; max-width: 1172px; margin: 0 auto; padding-top: 30px; scroll-margin-top: 30px; }
+.corner-navigation { position: fixed; inset: 0; z-index: 80; display: flex; flex-direction: column; padding: 0 clamp(24px, 6vw, 108px); visibility: hidden; opacity: 0; overflow-y: auto; color: #edece0; }
+.corner-navigation-top { display: flex; align-items: center; justify-content: space-between; min-height: 106px; flex: 0 0 106px; border-bottom: 1px solid #dddcc21f; }
+.corner-navigation-top > span { font-size: 18px; letter-spacing: .12em; }
+.corner-navigation-top > span > span { display: block; margin-top: 7px; color: #a7ad9b; font-size: 9px; letter-spacing: .22em; }
+.corner-navigation .corner-menu-toggle:hover { color: #cdb995; }
+.corner-navigation-body { width: min(690px, 58%); margin-block: auto; padding: 56px 0 64px; }
+.corner-menu-kicker { margin: 0 0 27px 30px; color: #a0a694; font-size: 11px; letter-spacing: .14em; }
+.corner-navigation-primary { display: flex; flex-direction: column; }
+.corner-navigation-primary > a { position: relative; display: flex; align-items: center; gap: 24px; padding: 15px 0; min-height: 102px; border-bottom: 1px solid #b6b8a51f; }
+.corner-menu-number { align-self: flex-start; margin-top: 22px; color: #919984; font-family: 'SimSun', serif; font-size: 12px; }
+.corner-menu-title { font-size: clamp(44px, 4.7vw, 74px); line-height: 1.15; letter-spacing: -.035em; transition: color .2s ease; }
+.corner-menu-note { margin-left: auto; color: #979e8a; font-size: 10px; letter-spacing: .1em; transition: opacity .2s; }
+.corner-menu-arrow { font-size: 28px; font-weight: 200; margin-inline: 20px 5px; color: #aaa995; opacity: 0; transform: translate(-8px, 8px); transition: transform .3s ease, opacity .3s ease; }
+.corner-navigation-primary > a:hover .corner-menu-title, .corner-navigation-primary > a:focus-visible .corner-menu-title, .corner-navigation-primary > a[aria-current] .corner-menu-title { color: #c8bda5; }
+.corner-navigation-primary > a:hover .corner-menu-arrow, .corner-navigation-primary > a:focus-visible .corner-menu-arrow { opacity: 1; transform: translate(0); }
+.corner-navigation-secondary { display: flex; flex-wrap: wrap; gap: 34px; margin: 32px 0 0 30px; font-size: 12px; color: #b1b6a3; }
+.corner-navigation-secondary a:hover { color: #f2e9d4; }
+.corner-navigation-bottom { display: flex; align-items: center; flex-wrap: wrap; gap: 38px; padding: 24px 0 30px; border-top: 1px solid #b6b8a522; color: #a5ad97; font-size: 11px; }
+.corner-navigation-bottom > a { min-height: 28px; display: flex; align-items: center; }
+.corner-menu-account { display: flex; align-items: center; gap: 25px; margin-left: auto; }
+.corner-menu-account > span { max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.corner-menu-account button { padding: 6px 0; border-radius: 0; color: #a5ad97; font-size: 11px; background: transparent; }
+.corner-menu-account button:hover { background: transparent; color: #ead7b5; }
+.corner-navigation a:focus-visible, .corner-navigation button:focus-visible { outline-color: #c4b28b; }
+/* 首轮内页只重绘记录列表，数据请求、筛选、编辑与删除沿用原实现。 */
+.corner-app .records-page { max-width: 1172px; margin-inline: auto; padding-top: 0; }
+.corner-app .records-page .page-heading { min-height: 290px; margin: 0; align-items: center; padding: 46px 0 40px; border-bottom: 1px solid #b2b3a751; }
+.corner-app .records-page .page-heading h1 { font-size: clamp(40px, 4.4vw, 65px); letter-spacing: -.04em; line-height: 1.3; }
+.corner-app .records-page .page-heading .eyebrow { margin-bottom: 17px; font-size: 10px; letter-spacing: .14em; color: #7a8071; }
+.corner-app .records-page .page-heading p:last-child { margin-top: 19px; color: #69715f; font-size: 15px; line-height: 1.8; }
+.corner-app .records-page .page-heading .button { align-self: flex-end; margin-bottom: 15px; border-radius: 2px; box-shadow: none; }
+.corner-app .records-panel { padding: 32px 0; border: 0; border-radius: 0; background: #e9e6de; box-shadow: none; }
+.corner-app .records-toolbar { margin-bottom: 28px; }
+.corner-app .records-toolbar h2 { font-size: 15px; font-weight: 500; }
+.corner-app .records-toolbar p { color: #69715f; font-size: 12px; }
+.corner-app .filter-field { gap: 10px; color: #69715f; font-size: 13px; }
+.corner-app .filter-field select { border-radius: 2px; border-color: #c6c9bb; background: transparent; min-width: 130px; }
+.corner-app .record-grid { display: block; }
+.corner-app .record-card { display: grid; grid-template-columns: 155px minmax(0, 1fr) auto; column-gap: 30px; row-gap: 12px; padding: 29px 0; min-height: 0; border: 0; border-bottom: 1px solid #c7c9bc; border-radius: 0; background: transparent; box-shadow: none; }
+.corner-app .record-card-meta { grid-column: 1; grid-row: 1 / 4; display: flex; flex-direction: column; align-items: flex-start; gap: 15px; padding-top: 5px; }
+.corner-app .record-card-meta .type-chip { padding: 0; color: #656d5c; background: transparent; font-size: 12px; }
+.corner-app .record-card-meta time { color: #727a69; font-size: 12px; }
+.corner-app .record-card-title { grid-column: 2; grid-row: 1; margin: 0; }
+.corner-app .record-card-title h3 { margin: 0; font-family: 'Songti SC', 'Noto Serif SC', 'SimSun', serif; font-size: 26px; font-weight: 400; line-height: 1.5; }
+.corner-app .record-preview { grid-column: 2; grid-row: 2; max-width: 680px; margin: 0; min-height: 0; font-size: 15px; line-height: 1.9; color: #616b57; -webkit-line-clamp: 2; }
+.corner-app .record-flags { grid-column: 2; grid-row: 3; margin: 0; color: #75816a; font-size: 11px; }
+.corner-app .record-flags span { border: 0; padding: 0; background: transparent; }
+.corner-app .record-card-actions { grid-column: 3; grid-row: 1 / 4; align-self: end; gap: 18px; margin: 0 0 3px; padding: 0; border: 0; font-size: 13px; }
+.corner-app .record-card-actions a { color: #56644d; min-height: 44px; display: inline-flex; align-items: center; }
+.corner-app .record-card-actions button { color: #887765; min-height: 44px; font-size: inherit; }
+.corner-app .records-panel .state-panel { border-radius: 2px; background: #eceae1; border-color: #d2d3c5; }
+@media (max-width: 1000px) {
+  .corner-header-actions { gap: 28px; }
+  .corner-intro-copy { width: 65%; }
+  .corner-intro h1 { font-size: clamp(42px, 5.35vw, 64px); }
+  .corner-companion-caption { right: 0; bottom: 16%; }
+  .corner-navigation-body { width: 64%; }
+  .corner-menu-note { display: none; }
+  .corner-menu-arrow { margin-left: auto; }
+  .corner-app .record-card { grid-template-columns: 100px minmax(0, 1fr); column-gap: 24px; }
+  .corner-app .record-card-actions { grid-column: 2; grid-row: 4; justify-content: flex-start; margin-top: 3px; }
+}
+@media (max-width: 700px) {
+  .corner-app { padding-inline: 24px; }
+  .corner-header { min-height: 84px; gap: 14px; }
+  .corner-brand { gap: 9px; font-size: 15px; }
+  .corner-brand > .corner-brand-mark { width: 37px; height: auto; }
+  .corner-navigation-brand { gap: 9px; }
+  .corner-navigation-brand > .corner-brand-mark { width: 37px; }
+  .corner-navigation-brand > span { font-size: 15px; }
+  .corner-brand-note { font-size: 8px; }
+  .corner-header-actions { gap: 20px; font-size: 11px; }
+  .corner-write-link { gap: 9px; }
+  .corner-menu-toggle { gap: 8px; padding-left: 0; font-size: 11px; }
+  .corner-menu-toggle svg { width: 20px; height: 20px; }
+  .corner-return { display: none; }
+  .corner-intro { min-height: calc(100svh - 84px); align-items: flex-start; padding: 54px 0 90px; }
+  .corner-intro-copy { width: 100%; }
+  .corner-kicker { margin-bottom: 24px; font-size: 10px; }
+  .corner-intro h1 { font-size: clamp(37px, 8.5vw, 55px); }
+  .corner-intro-description { max-width: 290px; margin-top: 19px; font-size: 11px; }
+  .corner-intro-actions { gap: 29px; margin-top: 25px; }
+  .corner-primary-action { gap: 23px; padding: 13px 18px; font-size: 11px; }
+  .corner-text-action { gap: 16px; font-size: 11px; }
+  .corner-companion-caption { right: 5%; bottom: 7%; font-size: 9px; }
+  .corner-intro-footer { bottom: 10px; font-size: 9px; }
+  .corner-scene-fallback { width: 48%; right: 13%; top: 54%; }
+  .corner-navigation { padding-inline: 24px; }
+  .corner-navigation-top { min-height: 84px; flex-basis: 84px; }
+  .corner-navigation-top > span { font-size: 15px; }
+  .corner-navigation-body { width: 100%; padding: 35px 0 50px; margin-top: auto; }
+  .corner-menu-kicker { margin-left: 22px; margin-bottom: 22px; font-size: 10px; }
+  .corner-navigation-primary > a { min-height: 89px; padding-block: 16px; gap: 15px; }
+  .corner-menu-title { font-size: 47px; }
+  .corner-menu-number { margin-top: 15px; font-size: 10px; }
+  .corner-menu-arrow { margin-right: 0; font-size: 23px; }
+  .corner-navigation-secondary { margin-left: 22px; gap: 28px; font-size: 11px; }
+  .corner-navigation-bottom { column-gap: 25px; row-gap: 8px; padding: 20px 0; font-size: 10px; }
+  .corner-menu-account { width: 100%; margin-left: 0; justify-content: space-between; }
+  .corner-menu-account button { font-size: 10px; }
+  .corner-app .records-page .page-heading { min-height: 262px; padding-block: 39px 29px; gap: 20px; }
+  .corner-app .records-page .page-heading h1 { font-size: 44px; }
+  .corner-app .records-page .page-heading .button { font-size: 11px; margin-bottom: 0; padding: 11px 14px; }
+  .corner-app .records-panel { padding-top: 25px; }
+  .corner-app .record-card { grid-template-columns: 1fr; padding-block: 25px; row-gap: 10px; }
+  .corner-app .record-card-meta { grid-column: 1; grid-row: 1; flex-direction: row; align-items: center; gap: 18px; padding: 0; }
+  .corner-app .record-card-title { grid-column: 1; grid-row: 2; }
+  .corner-app .record-card-title h3 { font-size: 24px; }
+  .corner-app .record-preview { grid-column: 1; grid-row: 3; }
+  .corner-app .record-flags { grid-column: 1; grid-row: 4; }
+  .corner-app .record-card-actions { grid-column: 1; grid-row: 5; margin-top: 9px; }
+}
+@media (max-width: 380px) {
+  .corner-app { padding-inline: 20px; }
+  .corner-brand { font-size: 14px; }
+  .corner-brand-note { letter-spacing: .1em; }
+  .corner-header-actions { gap: 13px; }
+  .corner-intro { padding-top: 38px; }
+  .corner-intro h1 { font-size: 34px; }
+  .corner-intro-description { font-size: 10px; }
+  .corner-intro-actions { gap: 22px; }
+  .corner-menu-title { font-size: 41px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .corner-menu-arrow, .corner-menu-title { transition: none; }
+}
+
+
+
+
+
+
+/* 灰泥来自实际静态 PBR 素材；实时画布负责统一光影，文字区保持安静。 */
+.corner-app { background: transparent; }
+.corner-atmosphere { background: color-mix(in srgb, var(--corner-opening-paper, #e9e7e1) calc((1 - var(--corner-night, 0)) * 100%), #252b26); }
+.corner-atmosphere::after { display: none; }
+.corner-surface { opacity: .014; }
+.corner-header { background: transparent; }
+.corner-loading { position: fixed; z-index: 3; inset: 0; display: grid; place-items: center; color: #687060; background: var(--corner-opening-paper, #e9e7e1); font-size: 11px; pointer-events: none; clip-path: polygon(0% 0%,100% 0%,100% 100%,0% 100%); }
+.corner-loading-copy { display: flex; flex-direction: column; align-items: center; gap: 28px; padding: 24px; margin-top: -3vh; perspective: 1000px; }
+.corner-loading-symbol { width: clamp(170px, 19vw, 280px); transform-origin: 50% 70%; visibility: hidden; }
+.corner-loading-brand-mask { overflow: hidden; padding-block: 4px; perspective: 900px; }
+.corner-loading-brand { display: block; color: #41473e; font-family: 'Songti SC', 'Noto Serif SC', 'SimSun', serif; font-size: clamp(30px, 3vw, 42px); line-height: 1.4; font-weight: 400; letter-spacing: .22em; padding-left: .22em; visibility: hidden; }
+.corner-loading-meta { display: flex; flex-direction: column; align-items: center; gap: 14px; visibility: hidden; }
+.corner-loading-progress { width: 140px; height: 1px; background: #acae9f55; }
+.corner-loading-progress > span { display: block; height: 1px; width: 100%; background: #767b6b; transform-origin: left; transition: transform .18s ease-out; }
+.corner-loading-note { min-height: 18px; line-height: 1.7; letter-spacing: .08em; text-align: center; }
+.corner-opening-skip { position: fixed; z-index: 5; bottom: 26px; right: clamp(24px, 6vw, 108px); display: flex; align-items: center; gap: 18px; min-height: 44px; border-radius: 0; background: transparent; color: #606856; padding: 0 4px; font-size: 11px; }
+.corner-opening-skip:hover { background: transparent; color: #41473e; }
+.corner-scene-note { position: absolute; z-index: 2; top: 122px; left: clamp(24px, 6vw, 108px); max-width: calc(100% - 48px); margin: 0; color: #76796e; font-size: 11px; line-height: 1.7; pointer-events: none; }
+/* 加载阶段的首页已挂载，但入场由品牌停顿与场景首帧共同触发，避免文字提前消耗动画。 */
+.corner-opening-wait .corner-intro-copy, .corner-opening-wait .corner-companion-caption, .corner-opening-wait .corner-intro-footer, .corner-opening-wait .site-footer { opacity: 0; visibility: hidden; }
+/* 右下入口在跳过按钮撤掉后才交接；中断开场则立即恢复，不遗留隐藏的入口。 */
+.corner-intro-footer { transition: opacity .24s ease; }
+.corner-opening-active .corner-intro-footer { opacity: 0; visibility: hidden; }
+.corner-opening-skipped .corner-intro-footer { transition: none; }
+.corner-intro-copy { width: 52%; }
+.corner-intro h1 { font-size: clamp(42px, 4.5vw, 76px); letter-spacing: -.055em; }
+.corner-night .corner-loading { color: #d8daca; }
+@media (max-width: 700px) {
+  .corner-intro-copy { width: 100%; }
+  .corner-intro h1 { font-size: clamp(37px, 8.5vw, 55px); }
+  .corner-loading-copy { gap: 20px; }
+  .corner-loading-symbol { width: 190px; }
+  .corner-opening-skip { bottom: 16px; }
+  .corner-scene-note { top: 98px; left: 24px; font-size: 10px; }
+}
+@media (max-width: 380px) { .corner-intro h1 { font-size: 34px; } }
+/* 首页滚动后与内页都有独立纸面，文字不会穿到菜单按钮下面；开屏仍保留原有墙面。 */
+.corner-header::before { content: ''; position: absolute; inset: 0; z-index: -1; background: #e9e6de; opacity: 0; pointer-events: none; }
+.corner-app:not(.corner-home) .corner-header::before, .corner-header.is-scrolled::before { opacity: 1; }
+.corner-home-sections { scroll-margin-top: 130px; }
+@media (max-width: 700px) { .corner-home-sections { scroll-margin-top: 108px; } }
+/* 菜单文字出现时先由遮罩承接暗色，场景变暗后遮罩自然退去；反向关闭也沿用当前进度。 */
+.corner-navigation::before { content: ''; position: fixed; inset: 0; z-index: -1; pointer-events: none; background: #252b26; opacity: calc(1 - var(--corner-night, 0)); }
+
+.corner-load-leave-active { transition: opacity .2s ease; }
+.corner-load-leave-to { opacity: 0; }
+@media (prefers-reduced-motion: reduce) { .corner-load-leave-active, .corner-loading-progress > span, .corner-intro-footer { transition: none; } }

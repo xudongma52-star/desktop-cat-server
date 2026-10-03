@@ -1,14 +1,339 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { gsap } from 'gsap'
 import { RouterLink, RouterView } from 'vue-router'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from './stores/auth'
+import BrandMark from './components/BrandMark.vue'
 
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 const loggingOut = ref(false)
-const authLayout = computed(() => route.meta.layout === 'auth')
+const authLayout = computed(() => route.meta.layout === 'auth' || !route.name)
+const homeLayout = computed(() => route.name === 'home')
+const shell = ref<HTMLElement | null>(null)
+const main = ref<HTMLElement | null>(null)
+const menu = ref<HTMLElement | null>(null)
+const menuButton = ref<HTMLButtonElement | null>(null)
+const closeButton = ref<HTMLButtonElement | null>(null)
+const menuOpen = ref(false)
+const headerScrolled = ref(false)
+const reducedMotion = ref(window.matchMedia('(prefers-reduced-motion: reduce)').matches)
+const sceneState = reactive({ menu: 0, content: homeLayout.value ? 0 : 1, scroll: 0, hover: 0, reveal: 0, openingTone: 2 })
+const CornerScene = defineAsyncComponent(() => import('./components/CornerScene.vue'))
+const loadingProgress = ref(0)
+const sceneReady = ref(false)
+const sceneFailed = ref(false)
+const skipOpening = ref(false)
+const openingPhase = ref<'pending' | 'loading' | 'revealing' | 'complete'>('pending')
+const repeatVisit = sessionStorage.getItem('corner-wall-visited') === '1'
+let openingContext: gsap.Context | undefined
+let openingStarted = false
+let brandReady = false
+let preludeDone = false
+// 加载底、网页氛围与三维墙面共用色彩阶段；资源进度与视觉编排分别推进。
+const openingPaper = computed(() => {
+  const tone = sceneState.openingTone
+  return tone < 1 ? gsap.utils.interpolate('#c0cbbc', '#f1e4ce', tone) : gsap.utils.interpolate('#f1e4ce', '#e9e7e1', tone - 1)
+})
+
+function rememberOpening() {
+  if (sceneReady.value && homeLayout.value) sessionStorage.setItem('corner-wall-visited', '1')
+}
+
+function endOpening() {
+  // 用户已进入、打开菜单或换页后，晚到资源只补画面，不重新播放或抢焦点。
+  openingContext?.revert()
+  openingContext = undefined
+  skipOpening.value = true
+  sceneState.reveal = 1
+  sceneState.openingTone = 2
+  openingPhase.value = 'complete'
+  rememberOpening()
+}
+
+async function finishOpening(result: { failed: boolean }) {
+  sceneReady.value = true
+  sceneFailed.value = result.failed
+  if (openingPhase.value !== 'loading' || !homeLayout.value || skipOpening.value || menuOpen.value || reducedMotion.value) {
+    if (openingPhase.value !== 'complete') endOpening()
+    else rememberOpening()
+    return
+  }
+  await revealOpening()
+}
+
+function onBrandReady() {
+  brandReady = true
+  void startOpening()
+}
+
+async function startOpening() {
+  if (!brandReady || openingStarted || openingPhase.value !== 'loading' || !shell.value) return
+  if (reducedMotion.value) { endOpening(); return }
+  await nextTick()
+  if (openingStarted || openingPhase.value !== 'loading') return
+  openingStarted = true
+  const copy = shell.value?.querySelector('.corner-loading-copy')
+  if (!copy) { endOpening(); return }
+  const duration = repeatVisit ? .4 : 1.2
+  openingContext = gsap.context(() => {
+    // 品牌先成形，资源慢时留在这一自然停顿，不循环、不伪造进度。
+    gsap.timeline({ onComplete: () => { preludeDone = true; void revealOpening() } })
+      .fromTo(copy.querySelector('.corner-loading-symbol'),
+        { autoAlpha: 0, yPercent: 12, rotateX: 18, scale: .94, clipPath: 'polygon(0% 100%,100% 100%,100% 100%,0% 100%)' },
+        { autoAlpha: 1, yPercent: 0, rotateX: 0, scale: 1, clipPath: 'polygon(0% 0%,100% 0%,100% 100%,0% 100%)', duration: duration * .78, ease: 'power3.out' }, 0)
+      .fromTo(copy.querySelector('.corner-loading-brand'),
+        { yPercent: 110, rotateX: 16, autoAlpha: 0 },
+        { yPercent: 0, rotateX: 0, autoAlpha: 1, duration: duration * .62, ease: 'power3.out' }, duration * .25)
+      .fromTo(copy.querySelector('.corner-loading-meta'), { autoAlpha: 0, y: 6 },
+        { autoAlpha: 1, y: 0, duration: duration * .38 }, duration * .52)
+      .to(sceneState, { openingTone: 1, duration, ease: 'sine.inOut' }, 0)
+  }, shell.value!)
+}
+
+async function revealOpening() {
+  if (!preludeDone || !sceneReady.value || openingPhase.value !== 'loading') return
+  if (!homeLayout.value || menuOpen.value || reducedMotion.value) { endOpening(); return }
+  openingPhase.value = 'revealing'
+  await nextTick()
+  if (openingPhase.value !== 'revealing' || !homeLayout.value || menuOpen.value) return
+  const intro = main.value?.querySelector('.corner-intro')
+  if (!intro) { endOpening(); return }
+  const duration = repeatVisit ? .65 : 1.65
+  // 首帧准备好才接续揭幕；标题与背景共用时序，避免提前播完或再追加一段完整前奏。
+  openingContext?.add(() => {
+    gsap.timeline({ onComplete: () => { openingPhase.value = 'complete'; rememberOpening() } })
+      .to(sceneState, { reveal: 1, openingTone: 2, duration, ease: 'sine.inOut' }, 0)
+      .to(shell.value!.querySelector('.corner-loading'), { clipPath: 'polygon(0% -25%,100% -8%,100% -8%,0% -25%)', duration: duration * .72, ease: 'power3.inOut' }, 0)
+      .to(shell.value!.querySelector('.corner-loading-copy'), { autoAlpha: 0, yPercent: -12, duration: duration * .36, ease: 'power2.in' }, 0)
+      .fromTo(intro.querySelector('.corner-kicker'), { autoAlpha: 0, y: 10 },
+        { autoAlpha: 1, y: 0, duration: duration * .42, clearProps: 'opacity,visibility,transform' }, duration * .22)
+      .fromTo(intro.querySelectorAll('.corner-title-text'),
+        { autoAlpha: 0, yPercent: 100, rotateX: 14, z: -24, transformOrigin: '50% 100%' },
+        { autoAlpha: 1, yPercent: 0, rotateX: 0, z: 0, duration: duration * .68, stagger: duration * .10, ease: 'power3.out', clearProps: 'opacity,visibility,transform,transformOrigin' }, duration * .17)
+      .fromTo(intro.querySelectorAll('.corner-intro-description, .corner-intro-actions, .corner-companion-caption'),
+        { autoAlpha: 0, y: 8 },
+        { autoAlpha: 1, y: 0, duration: duration * .37, stagger: duration * .035, ease: 'power2.out', clearProps: 'opacity,visibility,transform' }, duration * .48)
+  })
+}
+const primaryEntries = [
+  { to: '/records', label: '我的记录', note: '把日子留下', number: '一' },
+  { to: '/captures', label: '随手记', note: '接住一闪而过', number: '二' },
+  { to: '/knowledge', label: '知识库', note: '让想法有处安放', number: '三' },
+]
+let menuTimeline: gsap.core.Timeline | undefined
+let context: gsap.Context | undefined
+let previousOverflow: string | undefined
+let media: MediaQueryList | undefined
+let scrollFrame = 0
+let focusFrame = 0
+let restoreMenuFocus = false
+let focusContentAfterNavigation = false
+const pageAnimations = new Map<Element, gsap.Context>()
+
+function focusContent() {
+  if (!focusContentAfterNavigation || menuOpen.value) return
+  const title = main.value?.querySelector<HTMLElement>('h1')
+  if (!title) return
+  title.setAttribute('tabindex', '-1')
+  focusWhenVisible(title, () => focusContentAfterNavigation && !menuOpen.value, () => { focusContentAfterNavigation = false })
+}
+
+function unlockScroll() {
+  if (previousOverflow !== undefined) document.body.style.overflow = previousOverflow
+  previousOverflow = undefined
+}
+
+function finishNavigationClose() {
+  if (menuOpen.value) return
+  void nextTick(() => {
+    if (menuOpen.value) return
+    focusContent()
+    if (restoreMenuFocus) focusWhenVisible(menuButton.value, () => !menuOpen.value)
+    restoreMenuFocus = false
+  })
+}
+
+function focusWhenVisible(element: HTMLElement | null, stillNeeded: () => boolean, onFocused?: () => void) {
+  cancelAnimationFrame(focusFrame)
+  if (!element) return
+  const focusRoute = route.fullPath
+  const previousFocus = document.activeElement
+  let attempts = 0
+  // 可见性落地后才聚焦；反向、换页或用户移动焦点都会取消旧目标，只重试短暂的渲染交接。
+  function focus() {
+    focusFrame = 0
+    if (!element!.isConnected || !stillNeeded() || route.fullPath !== focusRoute || attempts++ >= 10) return
+    if (document.activeElement !== previousFocus && document.activeElement !== document.body && document.activeElement !== element) return
+    if (element!.closest('[inert]') || getComputedStyle(element!).visibility === 'hidden' || !element!.getClientRects().length) {
+      focusFrame = requestAnimationFrame(focus)
+      return
+    }
+    element!.focus({ preventScroll: true })
+    if (document.activeElement === element) onFocused?.()
+    else focusFrame = requestAnimationFrame(focus)
+  }
+  focusFrame = requestAnimationFrame(focus)
+}
+
+function animateNavigation(open: boolean) {
+  if (!menu.value || !main.value) return
+  if (!menuTimeline) context?.add(() => {
+    menuTimeline = gsap.timeline({ paused: true, defaults: { ease: 'power2.out' }, onReverseComplete: finishNavigationClose })
+      .addLabel('scene', 0)
+      .to(sceneState, { menu: 1, duration: .44 }, 'scene')
+      // 阅读层在同一时间轴里依次交接，场景的明暗变化保持连续。
+      .to([main.value, shell.value!.querySelector('.corner-header'), shell.value!.querySelector('.site-footer')].filter(Boolean), { autoAlpha: 0, y: -12, duration: .1 }, 'scene')
+      .to(menu.value, { autoAlpha: 1, duration: .16 }, 'scene')
+      .fromTo(menu.value!.querySelectorAll('[data-menu-reveal]'),
+        { y: 28, opacity: 0 },
+        { y: 0, opacity: 1, duration: .3, stagger: .02, ease: 'power3.out' }, 'scene+=0.02')
+  })
+  // 复用并反向播放当前进度，快速开关不会重置文字位置或遗留暗色场景。
+  if (reducedMotion.value) {
+    menuTimeline?.progress(open ? 1 : 0, true).pause()
+    if (!open) finishNavigationClose()
+  }
+  else if (open) menuTimeline?.play()
+  else {
+    menuTimeline?.reverse()
+    if (menuTimeline?.time() === 0) finishNavigationClose()
+  }
+}
+
+async function openNavigation() {
+  if (menuOpen.value) { closeNavigation(); return }
+  if (openingPhase.value !== 'complete') endOpening()
+  menuOpen.value = true
+  restoreMenuFocus = false
+  previousOverflow = document.body.style.overflow
+  document.body.style.overflow = 'hidden'
+  await nextTick()
+  animateNavigation(true)
+  focusWhenVisible(closeButton.value, () => menuOpen.value)
+}
+
+function closeNavigation(restoreFocus = true) {
+  if (!menuOpen.value) return
+  menuOpen.value = false
+  restoreMenuFocus = restoreFocus
+  sceneState.hover = 0
+  unlockScroll()
+  animateNavigation(false)
+}
+
+function trapMenuFocus(event: KeyboardEvent) {
+  if (event.key === 'Escape') { event.preventDefault(); closeNavigation(); return }
+  if (event.key !== 'Tab' || !menu.value) return
+  const controls = [...menu.value.querySelectorAll<HTMLElement>('a[href], button:not(:disabled)')]
+  const first = controls[0]
+  const last = controls.at(-1)
+  if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus() }
+  else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus() }
+}
+
+async function navigateMenu(event: MouseEvent, to: string) {
+  // 保留链接的中键、组合键和新标签行为；普通点击才参与场景衔接。
+  if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return
+  event.preventDefault()
+  focusContentAfterNavigation = true
+  const failure = await router.push(to)
+  if (!failure || route.path === to) {
+    closeNavigation(false)
+    await nextTick()
+  } else {
+    focusContentAfterNavigation = false
+  }
+}
+
+function updateScroll() {
+  scrollFrame = 0
+  sceneState.scroll = homeLayout.value ? Math.min(window.scrollY / Math.max(window.innerHeight * .8, 1), 1) : 0
+  headerScrolled.value = window.scrollY > 8
+  if (headerScrolled.value && (openingPhase.value === 'loading' || openingPhase.value === 'revealing')) endOpening()
+}
+function onScroll() { if (!scrollFrame) scrollFrame = requestAnimationFrame(updateScroll) }
+function updateMotion() {
+  reducedMotion.value = media?.matches ?? false
+  if (reducedMotion.value && (openingPhase.value === 'loading' || openingPhase.value === 'revealing')) endOpening()
+  if (reducedMotion.value && menuTimeline) animateNavigation(menuOpen.value)
+}
+
+watch(authLayout, () => {
+  menuTimeline?.kill()
+  menuTimeline = undefined
+  sceneState.menu = 0
+  if (context) context.add(() => gsap.set(main.value, { autoAlpha: 1, y: 0 }))
+})
+
+// 路由初始化前后的 fullPath 都可能为“/”，同时观察名称以接上首次首页。
+watch(() => [route.fullPath, route.name], () => {
+  const initialScene = openingPhase.value === 'pending' && !authLayout.value
+  if (initialScene) {
+    if (homeLayout.value) { sceneState.openingTone = 0; openingPhase.value = 'loading'; void nextTick(startOpening) }
+    else endOpening()
+  } else if (!homeLayout.value && (openingPhase.value === 'loading' || openingPhase.value === 'revealing')) endOpening()
+  closeNavigation(false)
+  // 首次解析路由时先落实取景；只有后续真实换页才做场景过渡，快资源也不会先显示内页位置。
+  if (initialScene || !context) sceneState.content = homeLayout.value ? 0 : 1
+  else context.add(() => gsap.to(sceneState, { content: homeLayout.value ? 0 : 1, duration: reducedMotion.value ? 0 : .64, ease: 'power3.inOut', overwrite: 'auto' }))
+  updateScroll()
+}, { immediate: true })
+
+function enterPage(element: Element, done: () => void) {
+  cancelPage(element)
+  // 首次首页由品牌与资源首帧共同触发开场；这里只完成 Vue 挂载，不并行播放第二套文字动画。
+  if (homeLayout.value && openingPhase.value !== 'complete') { void nextTick(done); return }
+  // 减少动态时直接完成 Vue 的页面交接，避免零时长时间轴在挂载前消费完成回调。
+  if (reducedMotion.value) { void nextTick(done); return }
+  const ctx = gsap.context(() => {
+    const timeline = gsap.timeline({ onComplete: done })
+    timeline.fromTo(element, { autoAlpha: 0, y: 18 }, { autoAlpha: 1, y: 0, duration: reducedMotion.value ? 0 : .46, ease: 'power3.out', clearProps: 'opacity,visibility,transform' }, 0)
+    const lines = element.querySelectorAll('.corner-kicker, .corner-title-line, .corner-intro-description, .corner-intro-actions')
+    if (lines.length) timeline.fromTo(lines, { autoAlpha: 0, y: 22 }, { autoAlpha: 1, y: 0, duration: reducedMotion.value ? 0 : .65, stagger: reducedMotion.value ? 0 : .07, ease: 'power3.out', clearProps: 'opacity,visibility,transform' }, 0)
+  }, element)
+  pageAnimations.set(element, ctx)
+}
+
+function leavePage(element: Element, done: () => void) {
+  cancelPage(element)
+  if (reducedMotion.value) { void nextTick(done); return }
+  const width = element.getBoundingClientRect().width
+  const ctx = gsap.context(() => {
+    // 先退出旧页面再显示新页面，三维背景持续变化，避免两页文字重叠。
+    gsap.set(element, { position: 'absolute', width, top: 0, left: 0, pointerEvents: 'none' })
+    gsap.to(element, { autoAlpha: 0, y: -10, duration: reducedMotion.value ? 0 : .18, ease: 'power2.in', onComplete: done })
+  }, element)
+  pageAnimations.set(element, ctx)
+}
+function cancelPage(element: Element) {
+  pageAnimations.get(element)?.revert()
+  pageAnimations.delete(element)
+}
+
+onMounted(() => {
+  context = gsap.context(() => {}, shell.value!)
+  sceneState.content = homeLayout.value ? 0 : 1
+  media = window.matchMedia('(prefers-reduced-motion: reduce)')
+  updateMotion()
+  media.addEventListener('change', updateMotion)
+  window.addEventListener('scroll', onScroll, { passive: true })
+  updateScroll()
+  void startOpening()
+})
+onBeforeUnmount(() => {
+  openingContext?.revert()
+  unlockScroll()
+  cancelAnimationFrame(scrollFrame)
+  cancelAnimationFrame(focusFrame)
+  window.removeEventListener('scroll', onScroll)
+  media?.removeEventListener('change', updateMotion)
+  context?.revert()
+  pageAnimations.forEach((ctx) => ctx.revert())
+  pageAnimations.clear()
+})
 
 async function logout() {
   if (loggingOut.value) return
@@ -23,34 +348,77 @@ async function logout() {
 </script>
 
 <template>
-  <div class="app-shell" :class="{ 'auth-mode': authLayout }">
-    <header v-if="!authLayout" class="site-header">
-      <RouterLink class="brand" to="/" aria-label="猫的角落首页">
-        <span class="brand-mark">🐾</span>
-        <span>猫的角落</span>
+  <div ref="shell" class="app-shell" :class="{ 'auth-mode': authLayout, 'corner-app': !authLayout, 'corner-home': homeLayout, 'corner-night': menuOpen, 'corner-opening-wait': openingPhase === 'loading', 'corner-opening-active': openingPhase === 'loading' || openingPhase === 'revealing', 'corner-opening-skipped': skipOpening }" :style="{ '--corner-night': sceneState.menu, '--corner-opening-paper': openingPaper }" :data-scene-content="sceneState.content" :data-opening-tone="sceneState.openingTone" :data-opening-phase="openingPhase">
+    <div v-if="!authLayout" class="corner-atmosphere" aria-hidden="true"></div>
+    <CornerScene v-if="!authLayout" :menu="sceneState.menu" :content="sceneState.content" :scroll="sceneState.scroll" :hover="sceneState.hover" :reveal="sceneState.reveal" :opening-tone="sceneState.openingTone" :opening-color="openingPaper" :reduced-motion="reducedMotion" :skip-opening="skipOpening" @progress="loadingProgress = $event" @failure="sceneFailed = true" @ready="finishOpening" />
+    <div v-if="!authLayout && (openingPhase === 'loading' || openingPhase === 'revealing')" class="corner-loading" :aria-hidden="openingPhase === 'revealing'">
+      <div class="corner-loading-copy">
+        <div class="corner-loading-symbol"><BrandMark @ready="onBrandReady" /></div>
+        <span class="corner-loading-brand-mask"><span class="corner-loading-brand">猫的角落</span></span>
+        <div class="corner-loading-meta">
+        <span class="corner-loading-progress" role="progressbar" aria-label="场景准备进度" :aria-valuenow="Math.round(loadingProgress * 100)" aria-valuemin="0" aria-valuemax="100" :aria-valuetext="sceneFailed ? '部分素材未就绪，将使用简化画面' : '正在准备场景'"><span :style="{ transform: `scaleX(${loadingProgress})` }"></span></span>
+        <span class="corner-loading-note" role="status" aria-live="polite">{{ sceneFailed ? '部分素材未就绪，将使用简化画面' : '正在准备' }}</span>
+        </div>
+      </div>
+    </div>
+    <button v-if="!authLayout && (openingPhase === 'loading' || openingPhase === 'revealing')" class="corner-opening-skip" type="button" @click="endOpening">直接进入 <span aria-hidden="true">↗</span></button>
+    <p v-if="homeLayout && sceneReady && sceneFailed && openingPhase === 'complete' && !menuOpen" class="corner-scene-note" role="status">画面已简化，记录照常可用。</p>
+    <svg v-if="!authLayout" class="corner-surface" aria-hidden="true" focusable="false" width="100%" height="100%">
+      <defs>
+        <filter id="corner-paper-grain">
+          <feTurbulence type="fractalNoise" baseFrequency=".68" numOctaves="3" seed="8" stitchTiles="stitch" />
+          <feColorMatrix type="saturate" values="0" />
+        </filter>
+      </defs>
+      <rect width="100%" height="100%" filter="url(#corner-paper-grain)" />
+    </svg>
+    <header v-if="!authLayout" class="corner-header" :class="{ 'is-scrolled': headerScrolled }" :inert="menuOpen">
+      <RouterLink class="corner-brand" to="/" aria-label="猫的角落首页">
+        <BrandMark />
+        <span>猫的角落<span class="corner-brand-note">我们的小日子</span></span>
       </RouterLink>
-      <nav class="site-nav" aria-label="主要导航">
-        <RouterLink to="/">首页</RouterLink>
-        <RouterLink to="/records">我的记录</RouterLink>
-        <RouterLink to="/captures">随手记录</RouterLink>
-        <RouterLink to="/knowledge">知识库</RouterLink>
-        <RouterLink to="/emotions">今天的内心</RouterLink>
-        <RouterLink to="/reminders">提醒</RouterLink>
-        <RouterLink class="nav-action" to="/records/new">写下今天</RouterLink>
-        <span v-if="auth.user" class="nav-user" :title="auth.user.username">{{ auth.user.username }}</span>
-        <button class="nav-logout" type="button" :disabled="loggingOut" @click="logout">
-          {{ loggingOut ? '退出中' : '退出' }}
-        </button>
-      </nav>
+      <RouterLink v-if="!homeLayout" class="corner-return" to="/">← 回到角落</RouterLink>
+      <div class="corner-header-actions">
+        <RouterLink class="corner-write-link" to="/records/new">写下今天 <span aria-hidden="true">↗</span></RouterLink>
+        <button ref="menuButton" class="corner-menu-toggle" type="button" aria-haspopup="dialog" aria-controls="corner-navigation" :aria-expanded="menuOpen" @click="openNavigation">菜单 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 8h18M3 15h18" /></svg></button>
+      </div>
     </header>
 
-    <main class="site-main">
-      <RouterView />
+    <main ref="main" class="site-main" :inert="menuOpen || openingPhase === 'loading'">
+      <RouterView v-slot="{ Component }">
+        <Transition :css="false" mode="out-in" appear @enter="enterPage" @leave="leavePage" @after-enter="focusContent" @after-leave="cancelPage" @enter-cancelled="cancelPage" @leave-cancelled="cancelPage">
+          <component :is="Component" :key="route.path" />
+        </Transition>
+      </RouterView>
     </main>
 
-    <footer v-if="!authLayout" class="site-footer">
-      <span>不用一下子做完，今天也有一点点进展。</span>
-      <span>Vue 3 + Spring Boot 3 · 猫的角落</span>
+    <footer v-if="!authLayout" class="site-footer" :inert="menuOpen || openingPhase === 'loading'">
+      <span>两个人，一只猫，慢慢过日子。</span>
+      <a href="/素材来源.html" target="_blank" rel="noopener">素材来源</a>
     </footer>
+
+    <section v-if="!authLayout" id="corner-navigation" ref="menu" class="corner-navigation" role="dialog" aria-modal="true" aria-labelledby="corner-navigation-title" :aria-hidden="!menuOpen" :inert="!menuOpen" @keydown="trapMenuFocus">
+      <div class="corner-navigation-top">
+        <div class="corner-navigation-brand"><BrandMark /><span id="corner-navigation-title">猫的角落<span>我们的小日子</span></span></div>
+        <button ref="closeButton" class="corner-menu-toggle" type="button" @click="closeNavigation()">关闭 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 5 14 14M5 19 19 5" /></svg></button>
+      </div>
+      <div class="corner-navigation-body">
+        <p class="corner-menu-kicker" data-menu-reveal>日子与想法，都在这里。</p>
+        <nav class="corner-navigation-primary" aria-label="主要导航">
+          <RouterLink v-for="(entry, index) in primaryEntries" :key="entry.to" :to="entry.to" custom v-slot="{ href, isActive }">
+            <a :href="href" :aria-current="isActive ? 'page' : undefined" data-menu-reveal @click="navigateMenu($event, entry.to)" @mouseenter="sceneState.hover = index + 1" @focus="sceneState.hover = index + 1" @mouseleave="sceneState.hover = 0"><span class="corner-menu-number">{{ entry.number }}</span><span class="corner-menu-title">{{ entry.label }}</span><span class="corner-menu-note">{{ entry.note }}</span><span class="corner-menu-arrow" aria-hidden="true">↗</span></a>
+          </RouterLink>
+        </nav>
+        <nav class="corner-navigation-secondary" aria-label="生活导航" data-menu-reveal>
+          <RouterLink to="/emotions" custom v-slot="{ href }"><a :href="href" @click="navigateMenu($event, '/emotions')">今天的内心 ↗</a></RouterLink>
+          <RouterLink to="/reminders" custom v-slot="{ href }"><a :href="href" @click="navigateMenu($event, '/reminders')">提醒 ↗</a></RouterLink>
+        </nav>
+      </div>
+      <div class="corner-navigation-bottom" data-menu-reveal>
+        <RouterLink to="/" custom v-slot="{ href }"><a :href="href" @click="navigateMenu($event, '/')">← 回到角落</a></RouterLink>
+        <a href="/downloads/desktop-cat-windows-x64-setup.exe" download>下载桌面猫 ↓</a>
+        <div class="corner-menu-account"><span v-if="auth.user">{{ auth.user.username }}</span><button type="button" :disabled="loggingOut" @click="logout">{{ loggingOut ? '退出中' : '退出登录' }}</button></div>
+      </div>
+    </section>
   </div>
 </template>

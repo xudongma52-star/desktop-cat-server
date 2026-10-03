@@ -15,7 +15,32 @@ import { useAuthStore } from '../stores/auth'
 
 export const router = createRouter({
   history: createWebHistory(),
-  scrollBehavior: () => ({ top: 0 }),
+  scrollBehavior: (to, from, savedPosition) => {
+    if (savedPosition && to.name === 'records') {
+      const restorePosition = savedPosition
+      // 等真实列表（或错误/空状态）形成高度后再恢复，避免加载占位把位置截短。
+      return new Promise((resolve) => {
+        const observer = new MutationObserver(restore)
+        const removeGuard = router.afterEach((next) => {
+          if (next.fullPath !== to.fullPath) { cleanup(); resolve(false) }
+        })
+        function cleanup() { observer.disconnect(); removeGuard() }
+        function restore() {
+          const page = document.querySelector('.records-page')
+          if (page && !page.querySelector('.state-panel[role="status"]')) {
+            cleanup()
+            resolve(restorePosition)
+          }
+        }
+        observer.observe(document.getElementById('app')!, { childList: true, subtree: true })
+        restore()
+      })
+    }
+    if (savedPosition) return savedPosition
+    if (to.hash) return { el: to.hash, top: 30 }
+    if (to.path === from.path) return false
+    return { top: 0 }
+  },
   routes: [
     { path: '/login', name: 'login', component: LoginView, meta: { guestOnly: true, layout: 'auth' } },
     { path: '/register', name: 'register', component: RegisterView, meta: { guestOnly: true, layout: 'auth' } },

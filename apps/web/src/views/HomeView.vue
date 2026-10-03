@@ -17,6 +17,7 @@ const profileError = ref('')
 const profileNotice = ref('')
 const savingProfile = ref(false)
 const connectionLabel = computed(() => checking.value ? '正在连接' : status.value ? '前后端已连通' : '等待连接')
+const todayLabel = new Intl.DateTimeFormat('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' }).format(new Date())
 
 async function checkConnection() {
   if (checking.value) return
@@ -73,24 +74,24 @@ onMounted(() => {
 
 <template>
   <div class="home-view">
-      <section class="intro">
-        <div>
-          <p class="eyebrow">MY LITTLE CORNER / 001</p>
-          <h1>把生活的碎片，<br />留在一个温暖的地方。</h1>
-          <p class="intro-text">记下今天，找回回忆。以后，还会有你的小猫陪在这里。<br />这里不催促你成长，只替你珍藏认真生活过的痕迹。</p>
-          <div class="hero-actions">
-            <RouterLink class="button prominent" to="/records/new">写下今天</RouterLink>
-            <RouterLink class="button secondary" to="/records">翻翻以前</RouterLink>
-            <a class="button secondary" href="/downloads/desktop-cat-windows-x64-setup.exe" download>下载桌面猫</a>
+      <section class="corner-intro" aria-labelledby="corner-intro-title">
+        <div class="corner-intro-copy">
+          <p class="corner-kicker"><span aria-hidden="true"></span>两个人，一只猫。</p>
+          <h1 id="corner-intro-title"><span class="corner-title-line"><span class="corner-title-text">我们的小日子，</span></span><span class="corner-title-line"><span class="corner-title-text">和一只小猫。</span></span></h1>
+          <p class="corner-intro-description">记一笔今天，留住那些舍不得忘的小事。</p>
+          <div class="corner-intro-actions">
+            <RouterLink class="corner-primary-action" to="/records/new">写下今天 <span aria-hidden="true">↗</span></RouterLink>
+            <RouterLink class="corner-text-action" to="/records">翻翻记录 <span aria-hidden="true">→</span></RouterLink>
           </div>
         </div>
-        <div class="cat-card" aria-hidden="true">
-          <span class="cat-face">🐱</span>
-          <span>{{ profile ? `${profile.catName}在这里陪你` : '小猫正在来的路上' }}</span>
-          <span class="cat-caption">YOUR LITTLE PARTNER</span>
+        <p class="corner-companion-caption"><span>{{ profile?.catName || '小猫' }}</span>在这里，陪我们慢慢过。</p>
+        <div class="corner-intro-footer">
+          <span>今天 · {{ todayLabel }}</span>
+          <a href="#home-memories">往下看看 <span aria-hidden="true">↓</span></a>
         </div>
       </section>
 
+      <div id="home-memories" class="corner-home-sections">
       <WritingActivityHeatmap />
 
       <PhotoCarousel />
@@ -142,5 +143,6 @@ onMounted(() => {
           <article><span class="feature-number">03 / 陪伴</span><h3>一只只属于你的小猫</h3><p>摸摸头、喂一块冻干，也帮你记住今天的事情。</p><span class="planned">待开发</span></article>
         </div>
       </section>
+      </div>
   </div>
 </template>

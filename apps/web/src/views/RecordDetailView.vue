@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { ApiError, describeApiError } from '../api/http'
 import { deleteRecord, formatRecordDate, getRecord, recordTypeLabels } from '../api/records'
@@ -7,11 +7,22 @@ import type { PersonalRecord } from '../api/records'
 
 const route = useRoute()
 const router = useRouter()
+const returnLocation = computed(() => ({ path: '/records', query: route.query }))
 const record = ref<PersonalRecord | null>(null)
 const loading = ref(true)
 const deleting = ref(false)
 const error = ref('')
 let loadGeneration = 0
+
+function returnToRecords(event: MouseEvent) {
+  if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return
+  event.preventDefault()
+  // 从列表进入时回退到原历史项，连同筛选、分页和滚动位置一起恢复；直达详情仍用正常链接。
+  if (router.options.history.state.back === router.resolve(returnLocation.value).fullPath) {
+    router.back()
+  } else void router.push(returnLocation.value)
+}
+
 
 function routeRecordId(): number | null {
   const value = Number(route.params.recordId)
@@ -52,7 +63,7 @@ async function removeCurrentRecord() {
   error.value = ''
   try {
     await deleteRecord(record.value.recordId, record.value.version)
-    await router.push('/records')
+    await router.push(returnLocation.value)
   } catch (caught) {
     if (caught instanceof ApiError && (caught.status === 409 || caught.code.includes('VERSION_CONFLICT'))) {
       const reloaded = await loadRecord()
@@ -75,13 +86,13 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="detail-page content-page narrow-page">
-    <div class="breadcrumb"><RouterLink to="/records">← 返回记录</RouterLink></div>
+    <div class="breadcrumb"><a :href="router.resolve(returnLocation).href" @click="returnToRecords">← 返回记录</a></div>
     <div v-if="loading" class="state-panel" role="status">正在打开这篇记录…</div>
     <div v-else-if="!record" class="state-panel error" role="alert">
       <p>{{ error }}</p>
       <div class="state-actions">
         <button type="button" class="button secondary" @click="loadRecord">重新加载</button>
-        <RouterLink class="button" to="/records">回到记录列表</RouterLink>
+        <a class="button" :href="router.resolve(returnLocation).href" @click="returnToRecords">回到记录列表</a>
       </div>
     </div>
     <article v-else class="record-detail">
@@ -95,7 +106,7 @@ onBeforeUnmount(() => {
         <h1>{{ record.title || '没有标题的一天' }}</h1>
         <div class="detail-flags">
           <span v-if="record.recallEnabled">🍃 已加入温馨回忆</span>
-          <span v-if="record.ragEnabled">⌁ 允许 AI 检索</span>
+          <span v-if="record.ragEnabled">⌁ 允许智能检索</span>
         </div>
       </header>
       <div class="record-content">{{ record.content }}</div>

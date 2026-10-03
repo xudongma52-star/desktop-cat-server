@@ -1,12 +1,15 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue'
-import { RouterLink } from 'vue-router'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { ApiError, describeApiError } from '../api/http'
 import { deleteRecord, formatRecordDate, getRecords, recordTypeLabels } from '../api/records'
 import type { RecordListItem, RecordPage, RecordType } from '../api/records'
 
 const pageSize = 12
-const selectedType = ref<RecordType | ''>('')
+const route = useRoute()
+const router = useRouter()
+const initialType = typeof route.query.recordType === 'string' ? route.query.recordType : ''
+const selectedType = ref<RecordType | ''>(['DIARY', 'THOUGHT', 'WORK_NOTE', 'NOTE'].includes(initialType) ? initialType as RecordType : '')
 const result = ref<RecordPage | null>(null)
 const loading = ref(true)
 const error = ref('')
@@ -18,6 +21,10 @@ async function loadRecords(page = 1): Promise<RecordPage | null> {
   const generation = ++loadGeneration
   requestedPage = page
   const requestedType = selectedType.value
+  // 列表位置放进当前历史项，从详情返回时沿用同一页和同一筛选条件。
+  if ((Number(route.query.page) || 1) !== page || (route.query.recordType || '') !== requestedType) {
+    void router.replace({ query: { ...route.query, page: page > 1 ? String(page) : undefined, recordType: requestedType || undefined } })
+  }
   loading.value = true
   error.value = ''
   try {
@@ -65,7 +72,7 @@ function changeFilter() {
   void loadRecords(1)
 }
 
-onMounted(() => void loadRecords())
+onMounted(() => void loadRecords(Math.max(1, Number(route.query.page) || 1)))
 onBeforeUnmount(() => {
   loadGeneration += 1
 })
@@ -75,9 +82,9 @@ onBeforeUnmount(() => {
   <div class="records-page content-page">
     <section class="page-heading">
       <div>
-        <p class="eyebrow">MY STORIES</p>
-        <h1>留下生活，也留下成长。</h1>
-        <p>日记、心得和实习笔记，都可以安静地放在这里。</p>
+        <p class="eyebrow">日常 · 记录</p>
+        <h1>我的记录</h1>
+        <p>那些平常的日子，回头看也会发光。</p>
       </div>
       <RouterLink class="button prominent" to="/records/new">＋ 写一篇记录</RouterLink>
     </section>
@@ -112,17 +119,17 @@ onBeforeUnmount(() => {
               <span class="type-chip">{{ recordTypeLabels[record.recordType] }}</span>
               <time :datetime="record.recordDate">{{ formatRecordDate(record.recordDate) }}</time>
             </div>
-            <RouterLink class="record-card-title" :to="`/records/${record.recordId}`">
+            <RouterLink class="record-card-title" :to="{ path: `/records/${record.recordId}`, query: route.query }">
               <h3>{{ record.title || '没有标题的一天' }}</h3>
             </RouterLink>
             <p class="record-preview">{{ record.excerpt || record.content || '这篇记录暂时没有摘要。' }}</p>
             <div class="record-flags">
               <span v-if="record.mood">心情 · {{ record.mood }}</span>
               <span v-if="record.recallEnabled">温馨回忆</span>
-              <span v-if="record.ragEnabled">允许 AI 检索</span>
+              <span v-if="record.ragEnabled">允许智能检索</span>
             </div>
             <div class="record-card-actions">
-              <RouterLink :to="`/records/${record.recordId}`">阅读全文</RouterLink>
+              <RouterLink :to="{ path: `/records/${record.recordId}`, query: route.query }">阅读全文</RouterLink>
               <RouterLink :to="`/records/${record.recordId}/edit`">编辑</RouterLink>
               <button type="button" :disabled="deletingId === record.recordId" @click="removeRecord(record)">
                 {{ deletingId === record.recordId ? '删除中…' : '删除' }}
