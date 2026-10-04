@@ -1,4 +1,7 @@
 html { scrollbar-gutter: stable; }
+/* 开屏覆盖整幅黑场，不露出浅色滚动槽；滚轮中断逻辑保留，结束后恢复页面滚动条。 */
+html:has(.corner-opening-active) { scrollbar-gutter: auto; scrollbar-width: none; }
+html:has(.corner-opening-active)::-webkit-scrollbar { display: none; }
 body:has(.corner-app) { min-width: 0; background: #e9e6de; }
 /* 视觉层独立于业务逻辑；导航更换外观时继续使用原有路由和登录行为。 */
 .corner-app {
@@ -192,17 +195,25 @@ body:has(.corner-app) { min-width: 0; background: #e9e6de; }
 .corner-atmosphere::after { display: none; }
 .corner-surface { opacity: .014; }
 .corner-header { background: transparent; }
-.corner-loading { position: fixed; z-index: 3; inset: 0; display: grid; place-items: center; color: #687060; background: var(--corner-opening-paper, #e9e7e1); font-size: 11px; pointer-events: none; clip-path: polygon(0% 0%,100% 0%,100% 100%,0% 100%); }
-.corner-loading-copy { display: flex; flex-direction: column; align-items: center; gap: 28px; padding: 24px; margin-top: -3vh; perspective: 1000px; }
-.corner-loading-symbol { width: clamp(170px, 19vw, 280px); transform-origin: 50% 70%; visibility: hidden; }
-.corner-loading-brand-mask { overflow: hidden; padding-block: 4px; perspective: 900px; }
-.corner-loading-brand { display: block; color: #41473e; font-family: 'Songti SC', 'Noto Serif SC', 'SimSun', serif; font-size: clamp(30px, 3vw, 42px); line-height: 1.4; font-weight: 400; letter-spacing: .22em; padding-left: .22em; visibility: hidden; }
-.corner-loading-meta { display: flex; flex-direction: column; align-items: center; gap: 14px; visibility: hidden; }
-.corner-loading-progress { width: 140px; height: 1px; background: #acae9f55; }
-.corner-loading-progress > span { display: block; height: 1px; width: 100%; background: #767b6b; transform-origin: left; transition: transform .18s ease-out; }
-.corner-loading-note { min-height: 18px; line-height: 1.7; letter-spacing: .08em; text-align: center; }
-.corner-opening-skip { position: fixed; z-index: 5; bottom: 26px; right: clamp(24px, 6vw, 108px); display: flex; align-items: center; gap: 18px; min-height: 44px; border-radius: 0; background: transparent; color: #606856; padding: 0 4px; font-size: 11px; }
-.corner-opening-skip:hover { background: transparent; color: #41473e; }
+@font-face { font-family: 'Corner Opening Serif'; src: url('./assets/fonts/corner-opening-serif.ttf') format('truetype'); font-weight: 400; font-style: normal; font-display: swap; }
+/* 开屏从等待切到揭幕时保持独立合成，避免底层场景与标题重绘导致品牌文字闪隐。 */
+.corner-loading { position: fixed; z-index: 6; inset: 0; color: #fff; background: #000; pointer-events: none; will-change: opacity; transform: translateZ(0); }
+.corner-loading-copy { position: absolute; inset: 0; }
+/* 参考十二列栅格的三个锚点；中文版按列宽调字号，桌面保持单行，不移动数字挤占间距。 */
+.corner-loading-identity { position: absolute; left: calc(100vw / 12 + 14.667px); top: 50%; transform: translateY(-50%); display: flex; align-items: center; gap: 16px; opacity: 0; visibility: hidden; clip-path: inset(0 100% 0 0); }
+.corner-loading-symbol { width: 34px; flex: 0 0 34px; }
+.corner-loading-symbol .corner-brand-mark { filter: invert(1); }
+.corner-loading-brand { font-family: 'Corner Opening Serif', 'Times New Roman', serif; font-size: 12px; font-weight: 400; letter-spacing: .28em; line-height: 1; }
+.corner-loading-quote { position: absolute; left: calc(100vw / 3 + 10.667px); top: 50%; transform: translateY(calc(-50% - 2.8px)); width: calc(100vw * 5 / 12 - 22.667px); margin: 0; font-family: 'Corner Opening Serif', 'Songti SC', 'SimSun', serif; font-size: clamp(14px, calc((100vw * 5 / 12 - 30px) / 27), 28px); font-weight: 400; font-synthesis: none; line-height: 1.2; letter-spacing: 0; white-space: nowrap; }
+.corner-loading-character { opacity: 0; }
+.corner-loading-progress { position: absolute; left: calc(75vw + 4px); top: 50%; transform: translateY(-50%); font-family: Arial, sans-serif; font-size: 14px; font-weight: 400; line-height: 1.1; font-variant-numeric: tabular-nums; opacity: 0; }
+.corner-loading-note { position: absolute; left: calc(100vw / 3 + 10.667px); top: calc(50% + 58px); max-width: 50vw; color: #aaa; font-size: 11px; line-height: 1.7; }
+.corner-opening-skip { position: fixed; z-index: 8; bottom: 26px; right: clamp(24px, 6vw, 108px); display: flex; align-items: center; gap: 18px; min-height: 44px; border-radius: 0; background: transparent; color: #999; padding: 0 4px; font-size: 11px; }
+.corner-opening-skip:hover { background: transparent; color: #fff; }
+/* 黑场保持参考的安静构图；原菜单仍可由指针或键盘中断，不增加声音提示或权限。 */
+.corner-opening-wait .corner-header { z-index: 7; visibility: hidden; }
+.corner-opening-wait .corner-menu-toggle { visibility: visible; opacity: 0; color: #fff; }
+.corner-opening-wait .corner-menu-toggle:hover, .corner-opening-wait .corner-menu-toggle:focus-visible { opacity: 1; }
 .corner-scene-note { position: absolute; z-index: 2; top: 122px; left: clamp(24px, 6vw, 108px); max-width: calc(100% - 48px); margin: 0; color: #76796e; font-size: 11px; line-height: 1.7; pointer-events: none; }
 /* 加载阶段的首页已挂载，但入场由品牌停顿与场景首帧共同触发，避免文字提前消耗动画。 */
 .corner-opening-wait .corner-intro-copy, .corner-opening-wait .corner-companion-caption, .corner-opening-wait .corner-intro-footer, .corner-opening-wait .site-footer { opacity: 0; visibility: hidden; }
@@ -212,12 +223,14 @@ body:has(.corner-app) { min-width: 0; background: #e9e6de; }
 .corner-opening-skipped .corner-intro-footer { transition: none; }
 .corner-intro-copy { width: 52%; }
 .corner-intro h1 { font-size: clamp(42px, 4.5vw, 76px); letter-spacing: -.055em; }
-.corner-night .corner-loading { color: #d8daca; }
 @media (max-width: 700px) {
   .corner-intro-copy { width: 100%; }
   .corner-intro h1 { font-size: clamp(37px, 8.5vw, 55px); }
-  .corner-loading-copy { gap: 20px; }
-  .corner-loading-symbol { width: 190px; }
+  /* 窄屏保留中文可读字号：品牌在上，引文与真实数字在下一带，不压缩为细小单行。 */
+  .corner-loading-identity { left: 24px; top: calc(50% - 74px); }
+  .corner-loading-quote { left: 24px; width: calc(100vw - 84px); font-size: 18px; line-height: 1.7; white-space: normal; overflow-wrap: anywhere; transform: translateY(-50%); }
+  .corner-loading-progress { left: auto; right: 24px; }
+  .corner-loading-note { left: 24px; top: calc(50% + 80px); max-width: calc(100vw - 48px); }
   .corner-opening-skip { bottom: 16px; }
   .corner-scene-note { top: 98px; left: 24px; font-size: 10px; }
 }

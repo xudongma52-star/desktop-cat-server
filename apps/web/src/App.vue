@@ -27,12 +27,13 @@ const sceneReady = ref(false)
 const sceneFailed = ref(false)
 const skipOpening = ref(false)
 const openingPhase = ref<'pending' | 'loading' | 'revealing' | 'complete'>('pending')
-const repeatVisit = sessionStorage.getItem('corner-wall-visited') === '1'
+const openingQuote = '判定认识或理论之是否真理，不是依主观上觉得如何而定……'
+const openingCharacters = Array.from(openingQuote)
 let openingContext: gsap.Context | undefined
 let openingStarted = false
 let brandReady = false
 let preludeDone = false
-// 加载底、网页氛围与三维墙面共用色彩阶段；资源进度与视觉编排分别推进。
+// 网页氛围与三维墙面共用色彩阶段；黑色品牌层退去后接上原墙面，资源进度独立推进。
 const openingPaper = computed(() => {
   const tone = sceneState.openingTone
   return tone < 1 ? gsap.utils.interpolate('#c0cbbc', '#f1e4ce', tone) : gsap.utils.interpolate('#f1e4ce', '#e9e7e1', tone - 1)
@@ -73,23 +74,22 @@ async function startOpening() {
   if (!brandReady || openingStarted || openingPhase.value !== 'loading' || !shell.value) return
   if (reducedMotion.value) { endOpening(); return }
   await nextTick()
+  // 只加载开屏使用的本地字体子集；失败时沿用宋体回退，不能阻止进入首页。
+  await document.fonts.load('400 28px "Corner Opening Serif"', openingQuote).catch(() => [])
   if (openingStarted || openingPhase.value !== 'loading') return
   openingStarted = true
   const copy = shell.value?.querySelector('.corner-loading-copy')
   if (!copy) { endOpening(); return }
-  const duration = repeatVisit ? .4 : 1.2
   openingContext = gsap.context(() => {
-    // 品牌先成形，资源慢时留在这一自然停顿，不循环、不伪造进度。
+    // 参考共享开屏：黑场、横向品牌显露、由左至右错峰渐亮、完整阅读停顿。
+    // 同会话刷新也保留这一品牌节奏；慢资源留在自然停顿，不循环、不伪造进度。
     gsap.timeline({ onComplete: () => { preludeDone = true; void revealOpening() } })
-      .fromTo(copy.querySelector('.corner-loading-symbol'),
-        { autoAlpha: 0, yPercent: 12, rotateX: 18, scale: .94, clipPath: 'polygon(0% 100%,100% 100%,100% 100%,0% 100%)' },
-        { autoAlpha: 1, yPercent: 0, rotateX: 0, scale: 1, clipPath: 'polygon(0% 0%,100% 0%,100% 100%,0% 100%)', duration: duration * .78, ease: 'power3.out' }, 0)
-      .fromTo(copy.querySelector('.corner-loading-brand'),
-        { yPercent: 110, rotateX: 16, autoAlpha: 0 },
-        { yPercent: 0, rotateX: 0, autoAlpha: 1, duration: duration * .62, ease: 'power3.out' }, duration * .25)
-      .fromTo(copy.querySelector('.corner-loading-meta'), { autoAlpha: 0, y: 6 },
-        { autoAlpha: 1, y: 0, duration: duration * .38 }, duration * .52)
-      .to(sceneState, { openingTone: 1, duration, ease: 'sine.inOut' }, 0)
+      .fromTo(copy.querySelector('.corner-loading-identity'),
+        { autoAlpha: 0, clipPath: 'inset(0 100% 0 0)' },
+        { autoAlpha: 1, clipPath: 'inset(0 0% 0 0)', duration: 1.1, ease: 'none' }, 2.1)
+      .to(copy.querySelectorAll('.corner-loading-character'), { opacity: 1, duration: 1.3, stagger: { amount: .35 }, ease: 'sine.inOut' }, 2.65)
+      .to(copy.querySelector('.corner-loading-progress'), { opacity: .5, duration: .6, ease: 'sine.inOut' }, 2.65)
+      .to({}, { duration: 1.05 }, 4.3)
   }, shell.value!)
 }
 
@@ -101,13 +101,15 @@ async function revealOpening() {
   if (openingPhase.value !== 'revealing' || !homeLayout.value || menuOpen.value) return
   const intro = main.value?.querySelector('.corner-intro')
   if (!intro) { endOpening(); return }
-  const duration = repeatVisit ? .65 : 1.65
+  const duration = 1.4
   // 首帧准备好才接续揭幕；标题与背景共用时序，避免提前播完或再追加一段完整前奏。
   openingContext?.add(() => {
     gsap.timeline({ onComplete: () => { openingPhase.value = 'complete'; rememberOpening() } })
       .to(sceneState, { reveal: 1, openingTone: 2, duration, ease: 'sine.inOut' }, 0)
-      .to(shell.value!.querySelector('.corner-loading'), { clipPath: 'polygon(0% -25%,100% -8%,100% -8%,0% -25%)', duration: duration * .72, ease: 'power3.inOut' }, 0)
-      .to(shell.value!.querySelector('.corner-loading-copy'), { autoAlpha: 0, yPercent: -12, duration: duration * .36, ease: 'power2.in' }, 0)
+      .to(shell.value!.querySelectorAll('.corner-loading-character'), { opacity: 0, duration: 1.15, stagger: { amount: .15, from: 'end' }, ease: 'sine.inOut' }, 0)
+      .to(shell.value!.querySelector('.corner-loading-identity'), { autoAlpha: 0, clipPath: 'inset(0 100% 0 0)', duration: .65, ease: 'none' }, .6)
+      .to(shell.value!.querySelector('.corner-loading-progress'), { opacity: 0, duration: .45 }, .8)
+      .to(shell.value!.querySelector('.corner-loading'), { autoAlpha: 0, duration: .9, ease: 'sine.inOut' }, .4)
       .fromTo(intro.querySelector('.corner-kicker'), { autoAlpha: 0, y: 10 },
         { autoAlpha: 1, y: 0, duration: duration * .42, clearProps: 'opacity,visibility,transform' }, duration * .22)
       .fromTo(intro.querySelectorAll('.corner-title-text'),
@@ -272,7 +274,7 @@ watch(authLayout, () => {
 watch(() => [route.fullPath, route.name], () => {
   const initialScene = openingPhase.value === 'pending' && !authLayout.value
   if (initialScene) {
-    if (homeLayout.value) { sceneState.openingTone = 0; openingPhase.value = 'loading'; void nextTick(startOpening) }
+    if (homeLayout.value) { openingPhase.value = 'loading'; void nextTick(startOpening) }
     else endOpening()
   } else if (!homeLayout.value && (openingPhase.value === 'loading' || openingPhase.value === 'revealing')) endOpening()
   closeNavigation(false)
@@ -353,12 +355,13 @@ async function logout() {
     <CornerScene v-if="!authLayout" :menu="sceneState.menu" :content="sceneState.content" :scroll="sceneState.scroll" :hover="sceneState.hover" :reveal="sceneState.reveal" :opening-tone="sceneState.openingTone" :opening-color="openingPaper" :reduced-motion="reducedMotion" :skip-opening="skipOpening" @progress="loadingProgress = $event" @failure="sceneFailed = true" @ready="finishOpening" />
     <div v-if="!authLayout && (openingPhase === 'loading' || openingPhase === 'revealing')" class="corner-loading" :aria-hidden="openingPhase === 'revealing'">
       <div class="corner-loading-copy">
-        <div class="corner-loading-symbol"><BrandMark @ready="onBrandReady" /></div>
-        <span class="corner-loading-brand-mask"><span class="corner-loading-brand">猫的角落</span></span>
-        <div class="corner-loading-meta">
-        <span class="corner-loading-progress" role="progressbar" aria-label="场景准备进度" :aria-valuenow="Math.round(loadingProgress * 100)" aria-valuemin="0" aria-valuemax="100" :aria-valuetext="sceneFailed ? '部分素材未就绪，将使用简化画面' : '正在准备场景'"><span :style="{ transform: `scaleX(${loadingProgress})` }"></span></span>
-        <span class="corner-loading-note" role="status" aria-live="polite">{{ sceneFailed ? '部分素材未就绪，将使用简化画面' : '正在准备' }}</span>
+        <div class="corner-loading-identity" aria-label="max">
+          <div class="corner-loading-symbol"><BrandMark @ready="onBrandReady" /></div>
+          <span class="corner-loading-brand">max</span>
         </div>
+        <p class="corner-loading-quote" :aria-label="openingQuote"><span v-for="(character, index) in openingCharacters" :key="index" class="corner-loading-character" aria-hidden="true">{{ character }}</span></p>
+        <span class="corner-loading-progress" role="progressbar" aria-label="场景准备进度" :aria-valuenow="Math.round(loadingProgress * 100)" aria-valuemin="0" aria-valuemax="100" :aria-valuetext="sceneFailed ? '部分素材未就绪，将使用简化画面' : '正在准备场景'">{{ Math.round(loadingProgress * 100) }}</span>
+        <span v-if="sceneFailed" class="corner-loading-note" role="status">部分素材未就绪，将使用简化画面</span>
       </div>
     </div>
     <button v-if="!authLayout && (openingPhase === 'loading' || openingPhase === 'revealing')" class="corner-opening-skip" type="button" @click="endOpening">直接进入 <span aria-hidden="true">↗</span></button>

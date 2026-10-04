@@ -1,0 +1,7 @@
+Noto Serif SC Regular — opening text subset, retrieved 2026-10-04.
+Source: https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400&text=...
+Official upstream: https://github.com/google/fonts/tree/main/ofl/notoserifsc
+License: SIL Open Font License 1.1; full text in OFL.txt.
+Subset contains only the approved opening quotation, max, and decimal digits.
+Hosted locally; no third-party font request is made by the application.
+The font is used only for the opening, leaving existing page fonts unchanged.
