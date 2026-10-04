@@ -4,6 +4,7 @@ import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { ApiError, describeApiError } from '../api/http'
 import { deleteRecord, formatRecordDate, getRecord, recordTypeLabels } from '../api/records'
 import type { PersonalRecord } from '../api/records'
+import MarkdownContent from '../components/MarkdownContent.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -109,7 +110,7 @@ onBeforeUnmount(() => {
           <span v-if="record.ragEnabled">⌁ 允许智能检索</span>
         </div>
       </header>
-      <div class="record-content">{{ record.content }}</div>
+      <MarkdownContent class="record-content" :content="record.content" />
       <footer class="detail-footer">
         <div class="detail-times">
           <span>创建于 {{ new Date(record.createdAt).toLocaleString('zh-CN') }}</span>

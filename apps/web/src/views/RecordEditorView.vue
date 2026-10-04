@@ -4,6 +4,7 @@ import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { ApiError, describeApiError } from '../api/http'
 import { createRecord, getRecord, todayInLocalTime, updateRecord } from '../api/records'
 import type { RecordInput, RecordType } from '../api/records'
+import MarkdownContent from '../components/MarkdownContent.vue'
 
 interface RecordFormState {
   recordType: RecordType
@@ -25,6 +26,7 @@ const editing = computed(() => recordId.value !== null)
 const version = ref<number | null>(null)
 const loading = ref(false)
 const saving = ref(false)
+const previewing = ref(false)
 const error = ref('')
 const fieldError = ref('')
 const form = reactive<RecordFormState>(emptyForm())
@@ -44,6 +46,7 @@ function emptyForm(): RecordFormState {
 
 function resetForm() {
   Object.assign(form, emptyForm())
+  previewing.value = false
   version.value = null
   error.value = ''
   fieldError.value = ''
@@ -181,10 +184,16 @@ onBeforeUnmount(() => {
           <small class="field-count">{{ form.title.length }} / 120</small>
         </label>
 
-        <label class="field">
-          <span>正文 <b aria-hidden="true">*</b></span>
-          <textarea v-model="form.content" rows="14" placeholder="今天发生了什么？你有什么感受或新发现？" required></textarea>
-        </label>
+        <div class="field">
+          <div class="body-heading">
+            <label for="record-content">正文 <b aria-hidden="true">*</b> <small>支持 Markdown</small></label>
+            <button class="button secondary" type="button" :aria-pressed="previewing" :disabled="!form.content.trim()" @click="previewing = !previewing">
+              {{ previewing ? '返回编辑' : '预览' }}
+            </button>
+          </div>
+          <textarea v-show="!previewing" id="record-content" v-model="form.content" rows="14" placeholder="今天发生了什么？也可以直接粘贴 Markdown 内容。" required></textarea>
+          <MarkdownContent v-if="previewing" class="body-preview" :content="form.content" />
+        </div>
 
         <label class="field">
           <span>今天的心情 <small>选填</small></span>
@@ -217,3 +226,11 @@ onBeforeUnmount(() => {
     </section>
   </div>
 </template>
+
+<style scoped>
+.body-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.body-heading b { color: #a55f51; }
+.body-heading small { margin-left: 5px; color: #959c94; font-weight: 400; }
+.body-heading button { padding: 7px 12px; font-size: 12px; }
+.body-preview { min-height: 300px; padding: 14px; border: 1px solid #d7ddd2; border-radius: 10px; background: #fbfcf8; color: #3f4d45; font-size: 15px; font-weight: 400; }
+</style>
