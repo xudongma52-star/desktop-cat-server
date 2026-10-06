@@ -74,8 +74,9 @@ onMounted(() => {
 
 <template>
   <div class="home-view">
-      <section class="corner-intro" aria-labelledby="corner-intro-title">
-        <div class="corner-intro-copy">
+      <section class="corner-intro" aria-label="草木浮雕">
+        <!-- 旧首屏文案保留在源码；全屏浮雕由外层场景呈现，业务入口改由 Menu 进入。 -->
+        <div class="corner-intro-copy" aria-hidden="true" inert>
           <p class="corner-kicker"><span aria-hidden="true"></span>两个人，一只猫。</p>
           <h1 id="corner-intro-title"><span class="corner-title-line"><span class="corner-title-text">我们的小日子，</span></span><span class="corner-title-line"><span class="corner-title-text">和一只小猫。</span></span></h1>
           <p class="corner-intro-description">记一笔今天，留住那些舍不得忘的小事。</p>
@@ -84,8 +85,8 @@ onMounted(() => {
             <RouterLink class="corner-text-action" to="/records">翻翻记录 <span aria-hidden="true">→</span></RouterLink>
           </div>
         </div>
-        <p class="corner-companion-caption"><span>{{ profile?.catName || '小猫' }}</span>在这里，陪我们慢慢过。</p>
-        <div class="corner-intro-footer">
+        <p class="corner-companion-caption" aria-hidden="true"><span>{{ profile?.catName || '小猫' }}</span>在这里，陪我们慢慢过。</p>
+        <div class="corner-intro-footer" aria-hidden="true" inert>
           <span>今天 · {{ todayLabel }}</span>
           <a href="#home-memories">往下看看 <span aria-hidden="true">↓</span></a>
         </div>

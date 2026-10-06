@@ -28,6 +28,7 @@ body:has(.corner-app) { min-width: 0; background: #e9e6de; }
 .corner-navigation-brand > span > span { display: block; margin-top: 6px; font-size: 9px; letter-spacing: .22em; color: #b8bdac; }
 .corner-brand-note { display: block; margin-top: 6px; font-size: 9px; letter-spacing: .22em; color: #7e8176; }
 .corner-header-actions { display: flex; align-items: center; gap: 42px; margin-left: auto; font-size: 12px; }
+.corner-playback-actions { display: flex; align-items: center; gap: 14px; }
 .corner-return { margin-left: 32px; color: #777c6f; font-size: 12px; }
 .corner-write-link { display: flex; align-items: center; gap: 22px; padding: 12px 0; }
 .corner-write-link:hover, .corner-return:hover { color: #8d7156; }
@@ -205,8 +206,10 @@ body:has(.corner-app) { min-width: 0; background: #e9e6de; }
 .corner-loading-symbol .corner-brand-mark { filter: invert(1); }
 .corner-loading-brand { font-family: 'Corner Opening Serif', 'Times New Roman', serif; font-size: 12px; font-weight: 400; letter-spacing: .28em; line-height: 1; }
 .corner-loading-quote { position: absolute; left: calc(100vw / 3 + 10.667px); top: 50%; transform: translateY(calc(-50% - 2.8px)); width: calc(100vw * 5 / 12 - 22.667px); margin: 0; font-family: 'Corner Opening Serif', 'Songti SC', 'SimSun', serif; font-size: clamp(14px, calc((100vw * 5 / 12 - 30px) / 27), 28px); font-weight: 400; font-synthesis: none; line-height: 1.2; letter-spacing: 0; white-space: nowrap; }
-.corner-loading-character { opacity: 0; }
+.corner-loading-character { display: inline-block; opacity: 0; will-change: opacity; }
 .corner-loading-progress { position: absolute; left: calc(75vw + 4px); top: 50%; transform: translateY(-50%); font-family: Arial, sans-serif; font-size: 14px; font-weight: 400; line-height: 1.1; font-variant-numeric: tabular-nums; opacity: 0; }
+/* 为现有透明度与裁切动画预留合成层，保持开屏文案、字形排版和时间轴不变。 */
+.corner-loading-identity, .corner-loading-progress { will-change: opacity, clip-path; }
 .corner-loading-note { position: absolute; left: calc(100vw / 3 + 10.667px); top: calc(50% + 58px); max-width: 50vw; color: #aaa; font-size: 11px; line-height: 1.7; }
 .corner-opening-skip { position: fixed; z-index: 8; bottom: 26px; right: clamp(24px, 6vw, 108px); display: flex; align-items: center; gap: 18px; min-height: 44px; border-radius: 0; background: transparent; color: #999; padding: 0 4px; font-size: 11px; }
 .corner-opening-skip:hover { background: transparent; color: #fff; }
@@ -235,6 +238,22 @@ body:has(.corner-app) { min-width: 0; background: #e9e6de; }
   .corner-scene-note { top: 98px; left: 24px; font-size: 10px; }
 }
 @media (max-width: 380px) { .corner-intro h1 { font-size: 34px; } }
+
+/* 草木首屏只保留音乐与 Menu；下方生活面板与原业务路由继续可达，内页沿用原布局。 */
+html:has(.corner-home) { scrollbar-gutter: auto; scrollbar-width: none; }
+html:has(.corner-home)::-webkit-scrollbar { display: none; }
+.corner-home .corner-header { position: fixed; top: 26px; right: clamp(24px, 4vw, 76px); min-height: 44px; border: 0; background: transparent; }
+.corner-home .corner-header > .corner-brand, .corner-home .corner-write-link { display: none; }
+.corner-home .corner-header-actions { margin: 0; }
+.corner-home .corner-menu-toggle { color: #575950; font-family: Arial, sans-serif; font-size: 12px; letter-spacing: .015em; gap: 0; }
+.corner-home .corner-menu-toggle svg { display: none; }
+.corner-home .corner-opening-wait .corner-menu-toggle { color: #fff; }
+.corner-home .corner-intro { height: 100svh; min-height: 100svh; padding: 0; }
+.corner-home .corner-intro-copy, .corner-home .corner-companion-caption, .corner-home .corner-intro-footer { display: none; }
+.corner-home .corner-home-sections { padding-top: 50px; }
+.botanical-scene { pointer-events: none; transform: translateZ(0); will-change: opacity; }
+.botanical-fallback { position: absolute; inset: 0; background: #d8d6d0; }
+@media (max-width: 700px) { .corner-home .corner-header { top: 18px; right: 24px; } }
 /* 首页滚动后与内页都有独立纸面，文字不会穿到菜单按钮下面；开屏仍保留原有墙面。 */
 .corner-header::before { content: ''; position: absolute; inset: 0; z-index: -1; background: #e9e6de; opacity: 0; pointer-events: none; }
 .corner-app:not(.corner-home) .corner-header::before, .corner-header.is-scrolled::before { opacity: 1; }

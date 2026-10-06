@@ -5,6 +5,7 @@ import { RouterLink, RouterView } from 'vue-router'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from './stores/auth'
 import BrandMark from './components/BrandMark.vue'
+import BackgroundMusic from './components/BackgroundMusic.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -12,6 +13,11 @@ const auth = useAuthStore()
 const loggingOut = ref(false)
 const authLayout = computed(() => route.meta.layout === 'auth' || !route.name)
 const homeLayout = computed(() => route.name === 'home')
+const botanicalMobile = ref(window.innerWidth < 700)
+// 只在跨越布局断点时重建首页背景；开屏、菜单与业务页面状态留在父组件。
+function updateBotanicalMode() {
+  botanicalMobile.value = window.innerWidth < 700
+}
 const shell = ref<HTMLElement | null>(null)
 const main = ref<HTMLElement | null>(null)
 const menu = ref<HTMLElement | null>(null)
@@ -22,6 +28,7 @@ const headerScrolled = ref(false)
 const reducedMotion = ref(window.matchMedia('(prefers-reduced-motion: reduce)').matches)
 const sceneState = reactive({ menu: 0, content: homeLayout.value ? 0 : 1, scroll: 0, hover: 0, reveal: 0, openingTone: 2 })
 const CornerScene = defineAsyncComponent(() => import('./components/CornerScene.vue'))
+const BotanicalScene = defineAsyncComponent(() => import('./components/BotanicalScene.vue'))
 const loadingProgress = ref(0)
 const sceneReady = ref(false)
 const sceneFailed = ref(false)
@@ -137,9 +144,9 @@ const pageAnimations = new Map<Element, gsap.Context>()
 
 function focusContent() {
   if (!focusContentAfterNavigation || menuOpen.value) return
-  const title = main.value?.querySelector<HTMLElement>('h1')
+  const title = homeLayout.value ? menuButton.value : main.value?.querySelector<HTMLElement>('h1')
   if (!title) return
-  title.setAttribute('tabindex', '-1')
+  if (!homeLayout.value) title.setAttribute('tabindex', '-1')
   focusWhenVisible(title, () => focusContentAfterNavigation && !menuOpen.value, () => { focusContentAfterNavigation = false })
 }
 
@@ -322,6 +329,8 @@ onMounted(() => {
   updateMotion()
   media.addEventListener('change', updateMotion)
   window.addEventListener('scroll', onScroll, { passive: true })
+  window.addEventListener('resize', updateBotanicalMode, { passive: true })
+  updateBotanicalMode()
   updateScroll()
   void startOpening()
 })
@@ -331,6 +340,7 @@ onBeforeUnmount(() => {
   cancelAnimationFrame(scrollFrame)
   cancelAnimationFrame(focusFrame)
   window.removeEventListener('scroll', onScroll)
+  window.removeEventListener('resize', updateBotanicalMode)
   media?.removeEventListener('change', updateMotion)
   context?.revert()
   pageAnimations.forEach((ctx) => ctx.revert())
@@ -352,7 +362,7 @@ async function logout() {
 <template>
   <div ref="shell" class="app-shell" :class="{ 'auth-mode': authLayout, 'corner-app': !authLayout, 'corner-home': homeLayout, 'corner-night': menuOpen, 'corner-opening-wait': openingPhase === 'loading', 'corner-opening-active': openingPhase === 'loading' || openingPhase === 'revealing', 'corner-opening-skipped': skipOpening }" :style="{ '--corner-night': sceneState.menu, '--corner-opening-paper': openingPaper }" :data-scene-content="sceneState.content" :data-opening-tone="sceneState.openingTone" :data-opening-phase="openingPhase">
     <div v-if="!authLayout" class="corner-atmosphere" aria-hidden="true"></div>
-    <CornerScene v-if="!authLayout" :menu="sceneState.menu" :content="sceneState.content" :scroll="sceneState.scroll" :hover="sceneState.hover" :reveal="sceneState.reveal" :opening-tone="sceneState.openingTone" :opening-color="openingPaper" :reduced-motion="reducedMotion" :skip-opening="skipOpening" @progress="loadingProgress = $event" @failure="sceneFailed = true" @ready="finishOpening" />
+    <component :is="homeLayout ? BotanicalScene : CornerScene" :key="homeLayout ? (botanicalMobile ? 'botanical-mobile' : 'botanical-desktop') : 'corner-scene'" v-if="!authLayout" :menu="sceneState.menu" :content="sceneState.content" :scroll="sceneState.scroll" :hover="sceneState.hover" :reveal="sceneState.reveal" :opening-tone="sceneState.openingTone" :opening-color="openingPaper" :reduced-motion="reducedMotion" :skip-opening="skipOpening" @progress="loadingProgress = $event" @failure="sceneFailed = true" @ready="finishOpening" />
     <div v-if="!authLayout && (openingPhase === 'loading' || openingPhase === 'revealing')" class="corner-loading" :aria-hidden="openingPhase === 'revealing'">
       <div class="corner-loading-copy">
         <div class="corner-loading-identity" aria-label="max">
@@ -383,7 +393,10 @@ async function logout() {
       <RouterLink v-if="!homeLayout" class="corner-return" to="/">← 回到角落</RouterLink>
       <div class="corner-header-actions">
         <RouterLink class="corner-write-link" to="/records/new">写下今天 <span aria-hidden="true">↗</span></RouterLink>
-        <button ref="menuButton" class="corner-menu-toggle" type="button" aria-haspopup="dialog" aria-controls="corner-navigation" :aria-expanded="menuOpen" @click="openNavigation">菜单 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 8h18M3 15h18" /></svg></button>
+        <div class="corner-playback-actions">
+          <BackgroundMusic :visible="openingPhase === 'complete'" />
+          <button ref="menuButton" class="corner-menu-toggle" type="button" aria-haspopup="dialog" aria-controls="corner-navigation" :aria-expanded="menuOpen" @click="openNavigation">{{ homeLayout ? 'Menu' : '菜单' }} <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 8h18M3 15h18" /></svg></button>
+        </div>
       </div>
     </header>
 
@@ -413,6 +426,7 @@ async function logout() {
           </RouterLink>
         </nav>
         <nav class="corner-navigation-secondary" aria-label="生活导航" data-menu-reveal>
+          <RouterLink to="/#home-memories" custom v-slot="{ href }"><a :href="href" @click="navigateMenu($event, '/#home-memories')">生活面板 ↗</a></RouterLink>
           <RouterLink to="/emotions" custom v-slot="{ href }"><a :href="href" @click="navigateMenu($event, '/emotions')">今天的内心 ↗</a></RouterLink>
           <RouterLink to="/reminders" custom v-slot="{ href }"><a :href="href" @click="navigateMenu($event, '/reminders')">提醒 ↗</a></RouterLink>
         </nav>
