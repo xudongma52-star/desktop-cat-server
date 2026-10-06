@@ -5,7 +5,6 @@ import { makeThinLeaf } from './botanicalUnifiedLeaves'
 import { makeMainUmbel } from './botanicalMainUmbel'
 import { makeSecondaryUmbel } from './botanicalSecondaryUmbel'
 import { makeRightBroadLeaf } from './botanicalRightBroadLeaves'
-import { makeGinkgoSprig } from './botanicalGinkgoSprig'
 import { makeLowHeartLeaves } from './botanicalLowHeartLeaves'
 import { makeCentralFlowerSprig } from './botanicalCentralFlowerSprig'
 import { makeTrifoliateUnit } from './botanicalTrifoliate'
@@ -77,24 +76,42 @@ export function makeBotanicalRelief(mobile: boolean) {
       for(const geometry of parts.slice(start))geometry.applyMatrix4(transform)
     }
   }
-  function thinLeaf(base: THREE.Vector3,length: number,width: number,angle: number,phase: number,lobed=false,variant=0) {
-    // 固定原枝条附着点和叶尖位置；前段留给叶柄，将高枝条平滑接到低薄叶面。
-    const petiole=Math.min(.07,length*.16)
-    const bladeBase=base.clone().add(point(-Math.sin(angle)*petiole,Math.cos(angle)*petiole,0));bladeBase.z=.011
-    twig([base,base.clone().lerp(bladeBase,.5),bladeBase],Math.min(.0035,length*.006),14)
+  function thinLeaf(base: THREE.Vector3,length: number,width: number,angle: number,phase: number,lobed=false,variant=0,continuous=false) {
+    // 固定枝条附着点和叶尖的平面位置；左侧弯茎的叶柄延长并沿接点高度过渡，其余叶片保留原低薄叶面。
+    const petiole=continuous ? Math.min(.14,length*.22) : Math.min(.07,length*.16)
+    const direction=point(-Math.sin(angle),Math.cos(angle),0)
+    const bladeBase=base.clone().addScaledVector(direction,petiole);bladeBase.z=continuous ? base.z-.004 : .011
+    if(continuous) {
+      // 叶柄末端沿中脉方向嵌入叶面；接点不再骤降到固定z，显露抬起时保持连续，不改变叶片厚度模板。
+      const shoulder=base.clone().addScaledVector(direction,petiole*.35)
+      const neck=bladeBase.clone().addScaledVector(direction,-petiole*.20)
+      const overlap=bladeBase.clone().addScaledVector(direction,.018)
+      gradedTwig([base,shoulder,neck,overlap],Math.min(.005,length*.009),.002,20)
+    } else twig([base,base.clone().lerp(bladeBase,.5),bladeBase],Math.min(.0035,length*.006),14)
     parts.push(makeThinLeaf(bladeBase,length-petiole,width,angle,phase,lobed,variant))
   }
-  function broad(x: number, height: number, lean: number, phase: number) {
-    const stem=twig([point(x,-4.55,.065),point(x+lean*.2,-4.45+height*.3,.07),point(x+lean*.62,-4.3+height*.67,.075),point(x+lean,-4.2+height,.055)],.017,50)
+  function broad(x: number, height: number, lean: number, phase: number, bowDegrees=0) {
+    const stemPoints=[point(x,-4.55,.065),point(x+lean*.2,-4.45+height*.3,.07),point(x+lean*.62,-4.3+height*.67,.075),point(x+lean,-4.2+height,.055)]
+    const originalStem=bowDegrees ? new THREE.CatmullRomCurve3(stemPoints.map(p=>p.clone())) : undefined
+    // 宽缓弧线的根和顶端固定；沿高度增加侧偏，角度描述弓形的尺度，各株使用不同幅度而非同一轮廓。
+    if(bowDegrees)for(const p of stemPoints) {
+      const t=(p.y+4.55)/(height+.35)
+      p.x-=Math.sin(Math.PI*t)*(height+.35)*Math.tan(THREE.MathUtils.degToRad(bowDegrees))/Math.PI
+    }
+    const stem=twig(stemPoints,.017,50)
     for (let i=1;i<=7;i++) {
       const t=i/8, p=stem.getPoint(t), side=i%2 ? -1 : 1
-      const length=(.63+random()*.48)*(1-t*.35), angle=-side*(.74+random()*.45)
-      const b=p.clone().add(point(side*.09,.05,-.06))
+      const length=(.63+random()*.48)*(1-t*.35)
+      const before=originalStem?.getTangent(t),after=stem.getTangent(t)
+      const turn=before ? Math.atan2(after.y,after.x)-Math.atan2(before.y,before.x) : 0
+      const angle=-side*(.74+random()*.45)+turn
+      const offset=point(side*.09,.05,bowDegrees ? -.004 : -.06).applyAxisAngle(point(0,0,1),turn)
+      const b=p.clone().add(offset)
       const leafStart=parts.length
       twig([p,p.clone().lerp(b,.55),b],.008,6)
       const width=length*(.17+random()*.10)
       if(mobile)leaf(b,length,width,angle,phase+i*.7,i%3===0)
-      else thinLeaf(b,length,width,angle,phase+i*.7,i%3===0,i)
+      else thinLeaf(b,length,width,angle,phase+i*.7,i%3===0,i,!!bowDegrees)
       if(!mobile&&phase===5&&i===5) {
         // 仅底中这株主茎第5叶连同原两段短梗绕真实接点正向转10°；固定根及全部z，保持叶形与内部连接。
         const transform=new THREE.Matrix4().makeTranslation(p.x,p.y,0)
@@ -104,10 +121,14 @@ export function makeBotanicalRelief(mobile: boolean) {
       }
     }
     if(mobile)leaf(stem.getPoint(.94),.48,.085,-.13,phase)
-    else thinLeaf(stem.getPoint(.94),.48,.085,-.13,phase,false,1)
+    else {
+      const before=originalStem?.getTangent(.94),after=stem.getTangent(.94)
+      const turn=before ? Math.atan2(after.y,after.x)-Math.atan2(before.y,before.x) : 0
+      thinLeaf(stem.getPoint(.94),.48,.085,-.13+turn,phase,false,1,!!bowDegrees)
+    }
     if(!mobile)growLower(stem,phase,phase===5 ? [{t:.40,dx:-.72,dy:.63,n:3},{t:.62,dx:.76,dy:.59,n:3}] : [{t:.29,dx:phase===2 ? 1.05 : -.92,dy:.92,n:4}])
   }
-  function grasses(x: number, height: number, lean: number, bends?: Array<[number,number]>) {
+  function grasses(x: number, height: number, lean: number, bends?: Array<[number,number]>,continuous=false) {
     const start=parts.length
     // 可选控制点用相对高度和横向偏移描述宽缓转向；根与穗顶固定，未传参的植株保留原曲线。
     const middle=bends ? bends.map(([t,offset])=>point(x+lean*t+offset,-4.55+(height+.25)*t,.05+.045*t)) : [point(x+lean*.4,-4.3+height*.5,.075)]
@@ -123,7 +144,7 @@ export function makeBotanicalRelief(mobile: boolean) {
     for (let i=0;i<3;i++) {
       const t=.15+i*.19,base=attachment(t),angle=direction(t)+(i%2 ? 1 : -1)*(.46+(bends ? (i===1 ? .045 : -.025) : 0))
       if(mobile)leaf(base,.85-i*.08,.035,angle,i*.9,false,false)
-      else thinLeaf(base,.85-i*.08,.035,angle,i*.9,false,i)
+      else thinLeaf(base,.85-i*.08,.035,angle,i*.9,false,i,continuous)
     }
     shallowAccent(start)
   }
@@ -306,26 +327,27 @@ export function makeBotanicalRelief(mobile: boolean) {
     fern(-1.40,1.40,.15,5,{scale:[.70,.65],angle:-.30,offset:[.12,-.08]})
     for(const geometry of parts.slice(fernStart))geometry.scale(1,1,.32)
   } else {
-    // 三片大小、朝向不同的银杏扇叶补上中偏左空缺；其他植物布局与显露场保持。
-    parts.push(makeGinkgoSprig())
+    // 上中偏左的银杏三叶与整条弯茎改由独立参考投影网格承载；其他植物布局与显露场保持。
     // 仅在底中植物带补一组低矮心形阔叶，保留上方中央留白及其他已验收植物。
     parts.push(makeLowHeartLeaves())
     // 第一轮结构修订：宽裂叶、疏花梗和斜向分枝为主体；两株蕨叶以不同尺度和斜向姿态退到底部配角。
-    // 仅左高株主管体适度增加截面可读性；曲线、原渐细比例和侧枝叶片不变，其他株沿用原半径。
-    branchedSprig(-6.25,7.40,1.22,1,[-.20,.20],1.33);broad(-6.50,4.65,.70,2)
+    // 左高株主管体保留原截面与侧枝；相邻阔叶主轴采用14°尺度的缓弓，叶柄随切线和接点高度连接。
+    branchedSprig(-6.25,7.40,1.22,1,[-.20,.20],1.33);broad(-6.50,4.65,.70,2,14)
     parts.push(makeSecondaryUmbel().scale(1,1,.70));openUmbel(-4.4,-3.82,-1.1,.48,3,8)
     // 第二轮左侧单株试件已冻结保留；第三轮只统一其余桌面真叶，构图与手机分支不变。
-    parts.push(makeStudyPlant());grasses(-6.45,6.45,.08)
+    // 左细草采用约9°尺度的另一条缓弓；根和穗顶保持，三片长叶随新曲线转向并连续接入主轴。
+    parts.push(makeStudyPlant());grasses(-6.45,6.45,.08,[[.32,-.33],[.67,-.29]],true)
     fern(-6.80,2.55,.48,1,{scale:[.78,.76],angle:.15,offset:[.12,-.08]});branchedSprig(-5.1,4.75,3.25,3)
-    branchedSprig(-1.65,3.70,1.3,4);broad(-.15,1.65,.78,5)
+    // 中下部阔叶株沿用连续叶柄与切线跟随，采用11°尺度的缓弓；第5叶原有10°姿态调整仍绕真实接点保留。
+    branchedSprig(-1.65,3.70,1.3,4);broad(-.15,1.65,.78,5,11)
     // 第四轮右上主花已阶段接受并保留；第五轮只协调左侧次花与下部枝叶层级。
     parts.push(makeMainUmbel().scale(1,1,.70))
     branchedSprig(3.15,5.55,1.45,6);branchedSprig(5.10,4.85,-3.6,7)
     dividedPlant(4.45,3.30,1.20,5);broad(6.55,3.8,-.13,6)
-    // 最右侧高草保留两处不等幅转向，右内侧用单次偏弯；左侧细草维持较直长势作对比。
+    // 最右侧高草保留两处不等幅转向，右内侧用单次偏弯；左侧细草使用自身较缓的弓形，不镜像右侧。
     grasses(6.70,7.55,-.26,[[.40,-.53],[.73,.07]]);grasses(5.10,6.1,-.55,[[.58,.42]]);fern(1.20,1.75,-.65,8,{scale:[.72,.80],angle:.23,offset:[.25,-.10]})
     // 中央空白补一组主花、侧花和合拢花苞，不迁移两侧已验收植物。
-    parts.push(makeCentralFlowerSprig())
+    parts.push(makeCentralFlowerSprig(false))
     // 中偏左仅补一枚同节点三出复叶，原植物及手机构图保持。
     parts.push(makeTrifoliateUnit())
     // 原右侧长杆左方仅补一片连续浅裂掌状叶，旧植物与三出复叶保持。

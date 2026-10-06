@@ -2,6 +2,10 @@
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import * as THREE from 'three'
 import { makeBotanicalRelief } from './botanicalRelief'
+import { makeReferenceMainFlower } from './botanicalReferenceFlower'
+import { makeReferenceGinkgo } from './botanicalReferenceGinkgo'
+import ginkgoReferenceUrl from '../assets/ginkgo-approved-reference.png'
+import flowerReferenceUrl from '../assets/flower-approved-reference.png'
 import wallNormalUrl from '../assets/beige_wall_001_nor_gl_1k.jpg'
 import wallRoughUrl from '../assets/beige_wall_001_rough_1k.jpg'
 
@@ -92,6 +96,7 @@ onMounted(() => {
         vec2 field=texture2D(botanicalFlow,botanicalShadowPosition/(botanicalExtent*2.)+.5).rg;
         float reveal=smoothstep(0.,1.,(field.r+field.g)*botanicalActive);
         // 无输入只留浅痕；Menu 平滑接回原夜色投影，避免交互场禁用时改变既有菜单背景。
+        // 主花与周围植物共用相同的交互投影强度；薄瓣外观由原图纹理保留。
         return mix(.06+.94*reveal,1.,botanicalShadowMenu);
       }
     `+shader.fragmentShader
@@ -117,10 +122,82 @@ onMounted(() => {
     shader.vertexShader=shader.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\ntransformed.z=.016+position.z*botanicalDepth(position.xy);')
   }
   depthMaterial.customProgramCacheKey=()=> 'botanical-shadow-depth-1';relief.customDepthMaterial=depthMaterial
+  // 主花使用原图描边网格及投影细节，共用原深度场；次花与其他植物仍保持原材质。
+  const flowerMaterial=mobile ? undefined : stone.clone()
+  const referenceFlower=flowerMaterial ? new THREE.Mesh(makeReferenceMainFlower(),flowerMaterial) : undefined
+  const flowerTint={value:new THREE.Vector3(1,1,1)}
+  const flowerDepthMaterial=referenceFlower ? depthMaterial.clone() : undefined
+  if(referenceFlower&&flowerMaterial){
+    referenceFlower.castShadow=referenceFlower.receiveShadow=true
+    // 静止保留原图贴墙基线，显现时增加整体抬升，让薄瓣与茎秆产生可见侧向投影。
+    const referenceLift='referenceAnchor+position.z*botanicalDepth(position.xy)+.035*clamp((botanicalDepth(position.xy)-botanicalBaseDepth)/botanicalLiftDepth,0.,1.)'
+    if(flowerDepthMaterial){
+      flowerDepthMaterial.onBeforeCompile=shader=>{
+        depthMaterial.onBeforeCompile(shader,gl)
+        shader.vertexShader='attribute float referenceAnchor;\n'+shader.vertexShader
+        shader.vertexShader=shader.vertexShader.replace('transformed.z=.016+position.z*botanicalDepth(position.xy)',`transformed.z=${referenceLift}`)
+      }
+      flowerDepthMaterial.customProgramCacheKey=()=> 'botanical-traced-main-flower-depth-1'
+      referenceFlower.customDepthMaterial=flowerDepthMaterial
+    }
+    scene.add(referenceFlower)
+    flowerMaterial.onBeforeCompile=shader=>{
+      stone.onBeforeCompile(shader,gl)
+      shader.vertexShader='attribute float referenceAnchor;\n'+shader.vertexShader
+      shader.vertexShader=shader.vertexShader.replace('transformed.z=.016+position.z*botanicalDepth(position.xy)',`transformed.z=${referenceLift}`)
+      // 整体抬升也随影响场变化，法线梯度和阴影网格保持同一变形。
+      shader.vertexShader=shader.vertexShader.replace('grad*position.z*objectNormal.z/depth','grad*(position.z+.035/botanicalLiftDepth)*objectNormal.z/depth')
+      shader.uniforms.flowerTint=flowerTint
+      shader.fragmentShader='uniform vec3 flowerTint;\n'+shader.fragmentShader
+      // 原图含光照，局部均值归一化只保留中高频外观；它是近似去光照，不是测得的真实反照率。
+      shader.fragmentShader=shader.fragmentShader.replace('#include <map_fragment>',`
+        #ifdef USE_MAP
+          vec3 detail=texture2D(map,vMapUv).rgb;
+          vec2 flowerField=texture2D(botanicalFlow,botanicalShadowPosition/(botanicalExtent*2.)+.5).rg;
+          float referenceReveal=smoothstep(0.,1.,(flowerField.r+flowerField.g)*botanicalActive);
+          vec2 spread=vec2(.017,.021);
+          vec3 localMean=(texture2D(map,vMapUv+vec2(spread.x,0.)).rgb+texture2D(map,vMapUv-vec2(spread.x,0.)).rgb+
+            texture2D(map,vMapUv+vec2(0.,spread.y)).rgb+texture2D(map,vMapUv-vec2(0.,spread.y)).rgb+detail*4.)/8.;
+          diffuseColor.rgb*=mix(vec3(1.),clamp(detail/max(localMean,vec3(.08)),vec3(.55),vec3(1.35)),referenceReveal);
+        #endif
+      `)
+      // 固定正面保留原图外观时，用混合替代重复乘光照；真实几何仍参与抬起和接触投影。
+      // 这属于带原图光照的投影外观，不能宣称已恢复真实反照率或任意角度一致的材质。
+      shader.fragmentShader=shader.fragmentShader.replace('#include <opaque_fragment>',`
+        #ifdef USE_MAP
+          outgoingLight=mix(outgoingLight,texture2D(map,vMapUv).rgb*flowerTint,.88*referenceReveal);
+        #endif
+        #include <opaque_fragment>
+      `)
+    }
+    flowerMaterial.customProgramCacheKey=()=> 'botanical-traced-main-flower-detail-1'
+  }
+  // 银杏沿用已验收投影材质与深度变形，独立纹理避免改变两朵花的资产。
+  const ginkgoMaterial=flowerMaterial?.clone()
+  const referenceGinkgo=ginkgoMaterial ? new THREE.Mesh(makeReferenceGinkgo(),ginkgoMaterial) : undefined
+  if(referenceGinkgo&&ginkgoMaterial&&flowerMaterial){
+    // 只在显现的原图投影中补偿细叶脉对比；静止材质仍共用墙面的色调映射。
+    ginkgoMaterial.onBeforeCompile=(shader,render)=>{
+      flowerMaterial.onBeforeCompile(shader,render)
+      shader.fragmentShader=shader.fragmentShader.replace('texture2D(map,vMapUv).rgb*flowerTint','clamp((texture2D(map,vMapUv).rgb-vec3(.55))*1.35+vec3(.55),vec3(.03),vec3(1.))*flowerTint')
+    }
+    ginkgoMaterial.customProgramCacheKey=()=> 'botanical-traced-ginkgo-detail-1'
+    referenceGinkgo.customDepthMaterial=flowerDepthMaterial
+    referenceGinkgo.castShadow=referenceGinkgo.receiveShadow=true;scene.add(referenceGinkgo)
+  }
   const textures: THREE.Texture[]=[];let completed=1,failed=false,ready=false
-  emit('progress',1/3)
+  const requiredAssets=mobile ? 3 : 5
+  emit('progress',1/requiredAssets)
   const loader=new THREE.TextureLoader()
-  function settled(error=false){if(disposed)return;completed++;failed ||= error;if(error)emit('failure');emit('progress',completed/3);requestDraw()}
+  function settled(error=false){if(disposed)return;completed++;failed ||= error;if(error)emit('failure');emit('progress',completed/requiredAssets);requestDraw()}
+  if(flowerMaterial)loader.load(flowerReferenceUrl,texture=>{
+    if(disposed){texture.dispose();return}textures.push(texture);texture.colorSpace=THREE.SRGBColorSpace
+    flowerMaterial.map=texture;flowerMaterial.needsUpdate=true;settled()
+  },undefined,()=>settled(true))
+  if(ginkgoMaterial)loader.load(ginkgoReferenceUrl,texture=>{
+    if(disposed){texture.dispose();return}textures.push(texture);texture.colorSpace=THREE.SRGBColorSpace
+    ginkgoMaterial.map=texture;ginkgoMaterial.needsUpdate=true;settled()
+  },undefined,()=>settled(true))
   loader.load(wallNormalUrl,texture=>{
     if(disposed){texture.dispose();return}textures.push(texture);texture.wrapS=texture.wrapT=THREE.RepeatWrapping;texture.repeat.set(5,3)
     wallMaterial.normalMap=stone.normalMap=texture;wallMaterial.normalScale.set(.04,.04);stone.normalScale.set(.012,.012);stone.needsUpdate=wallMaterial.needsUpdate=true;settled()
@@ -174,6 +251,8 @@ onMounted(() => {
     const w=container.clientWidth,h=container.clientHeight;aspect=w/Math.max(h,1)
     camera.left=-4*aspect;camera.right=4*aspect;camera.updateProjectionMatrix()
     relief.scale.x=aspect/(mobile ? 390/844 : 16/9);uniforms.botanicalScale.value.set(relief.scale.x,1);uniforms.botanicalExtent.value.set(4*aspect,4)
+    if(referenceFlower)referenceFlower.scale.x=relief.scale.x
+    if(referenceGinkgo)referenceGinkgo.scale.x=relief.scale.x
     if(mobile)fitMobileShadow()
     flowUniforms.aspect.value=aspect;gl.setSize(w,h);requestDraw()
   }
@@ -207,10 +286,13 @@ onMounted(() => {
     ambient.intensity=mobile ? 1.25-menu*.85 : ambientBase+(.40-ambientBase)*menu
     sun.intensity=mobile ? 2.9-menu*2.1 : sunBase+(.80-sunBase)*menu
     stone.color.copy(paper).lerp(night,menu);wallMaterial.color.copy(paper).lerp(night,menu)
+    flowerMaterial?.color.copy(stone.color)
+    ginkgoMaterial?.color.copy(stone.color)
+    flowerTint.value.set(stone.color.r/paper.r,stone.color.g/paper.g,stone.color.b/paper.b)
     backdrop.copy(paper).lerp(nightBackground,menu)
     container.style.opacity=String(1-Math.min(props.scroll,1)*.97*(1-menu))
     gl.render(scene,camera)
-    if(completed===3&&!ready){ready=true;status.value=failed ? 'simplified' : 'ready';emit('ready',{failed})}
+    if(completed===requiredAssets&&!ready){ready=true;status.value=failed ? 'simplified' : 'ready';emit('ready',{failed})}
     // 桌面场内驻留持续接续影响场；移出回浅后停止逐帧工作，场景可见、指针或状态变化时再唤醒。
     if(energy>.002||pressure>.002)requestDraw()
   }
@@ -225,6 +307,8 @@ onMounted(() => {
     textures.forEach(texture=>texture.dispose());targets.forEach(target=>target.dispose())
     sun.shadow.dispose()
     relief.geometry.dispose();wall.geometry.dispose();stone.dispose();wallMaterial.dispose();depthMaterial.dispose();flowPlane.geometry.dispose();flowMaterial.dispose()
+    referenceFlower?.geometry.dispose();flowerMaterial?.dispose();flowerDepthMaterial?.dispose()
+    referenceGinkgo?.geometry.dispose();ginkgoMaterial?.dispose()
   }
 })
 // 黑色开屏自己控制显露；草木在纹理就绪时提交首帧，不因未使用的开屏参数重绘底层画布。
