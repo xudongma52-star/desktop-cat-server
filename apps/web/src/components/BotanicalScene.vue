@@ -41,26 +41,33 @@ onMounted(() => {
   sun.shadow.camera.near=.1;sun.shadow.camera.far=30;sun.shadow.bias=-.0001;sun.shadow.normalBias=.008;sun.shadow.radius=3
   scene.add(ambient,sun)
 
-  // 低分辨率双缓冲影响场只存交互强度；植物仍是曲面几何，深度与阴影共用同一场。
+  // 低分辨率双缓冲影响场只存交互强度；桌面 RG 分别保留驻留与运动，植物深度与阴影共用同一场。
   const flowSize=mobile ? 96 : 160
-  const targets=[0,1].map(()=>new THREE.WebGLRenderTarget(flowSize,flowSize,{depthBuffer:false,minFilter:THREE.LinearFilter,magFilter:THREE.LinearFilter}))
-  const flowUniforms={previous:{value:targets[0]!.texture},pointer:{value:new THREE.Vector2(.5,.5)},velocity:{value:new THREE.Vector2()},aspect:{value:1},radius:{value:.15},strength:{value:0},clock:{value:0},decay:{value:.95},response:{value:1}}
+  const targets=[0,1].map(()=>new THREE.WebGLRenderTarget(flowSize,flowSize,{depthBuffer:false,type:mobile ? THREE.UnsignedByteType : THREE.HalfFloatType,minFilter:THREE.LinearFilter,magFilter:THREE.LinearFilter}))
+  const flowUniforms={previous:{value:targets[0]!.texture},pointer:{value:new THREE.Vector2(.5,.5)},velocity:{value:new THREE.Vector2()},aspect:{value:1},radius:{value:.15},strength:{value:0},motion:{value:0},clock:{value:0},decay:{value:.95},response:{value:1}}
   const flowMaterial=new THREE.ShaderMaterial({uniforms:flowUniforms,depthTest:false,depthWrite:false,
     vertexShader:'varying vec2 flowUv;void main(){flowUv=uv;gl_Position=vec4(position.xy,0.,1.);}',
     fragmentShader:`
       uniform sampler2D previous;uniform vec2 pointer;uniform vec2 velocity;
-      uniform float aspect,radius,strength,clock,decay,response;varying vec2 flowUv;
+      uniform float aspect,radius,strength,motion,clock,decay,response;varying vec2 flowUv;
       float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
       float noise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(hash(i),hash(i+vec2(1.,0.)),f.x),mix(hash(i+vec2(0.,1.)),hash(i+vec2(1.,1.)),f.x),f.y);}
       void main(){
         vec2 d=flowUv-pointer;d.x*=aspect;
-        float irregular=${mobile ? '.75+.32*noise(flowUv*vec2(aspect,1.)*17.+clock*.18)+.14*noise(flowUv*vec2(aspect,1.)*37.-clock*.12)' : '.72+.46*noise(flowUv*vec2(aspect,1.)*7.+clock*.09)+.18*noise(flowUv*vec2(aspect,1.)*13.-clock*.07)'};
-        float stamp=(1.-smoothstep(radius*${mobile ? '.22' : '.04'},radius*irregular,length(d)))*strength;
+        ${mobile ? `float irregular=.75+.32*noise(flowUv*vec2(aspect,1.)*17.+clock*.18)+.14*noise(flowUv*vec2(aspect,1.)*37.-clock*.12);
+        float stamp=(1.-smoothstep(radius*.22,radius*irregular,length(d)))*strength;
         // 速度携带旧场形成短拖尾；边缘是平滑噪声权重，没有圆圈或描边。
         float history=texture2D(previous,flowUv-velocity*.014).r*decay;
-        // 桌面以时间连续插值接续移动场，避免 max 在两片叶面交叠处保留尖锐高点；手机保留原场。
-        float value=${mobile ? 'max(history,stamp)' : 'mix(history,stamp,response)'};
-        gl_FragColor=vec4(value,value,value,1.);
+        float value=max(history,stamp);
+        gl_FragColor=vec4(value,value,value,1.);` : `
+        // 固定软笔触由连续噪声调制；收束来自运动贡献退去，不动画缩小半径。
+        vec2 p=flowUv*vec2(aspect,1.);
+        float organic=.30+.50*noise(p*7.+clock*.09)+.20*noise(p*17.-clock*.07);
+        float stamp=(1.-smoothstep(0.,radius,length(d)))*organic*strength;
+        // 驻留持续写入 R，实际速度只写 G；时间校正的积累/衰减保留短暂历史，半浮点避免尾部量化残留。
+        vec2 history=texture2D(previous,flowUv).rg*decay;
+        vec2 field=min(vec2(1.),history+stamp*response*vec2(2.2,3.6*motion));
+        gl_FragColor=vec4(field,0.,1.);`}
       }`})
   const flowScene=new THREE.Scene(),flowCamera=new THREE.Camera(),flowPlane=new THREE.Mesh(new THREE.PlaneGeometry(2,2),flowMaterial)
   flowScene.add(flowPlane)
@@ -70,8 +77,27 @@ onMounted(() => {
   const uniforms={botanicalFlow:{value:targets[0]!.texture},botanicalExtent:{value:new THREE.Vector2(7.11,4)},botanicalScale:{value:new THREE.Vector2(1,1)},botanicalActive:{value:1},botanicalBaseDepth:{value:mobile ? .24 : .06},botanicalLiftDepth:{value:mobile ? 1.36 : .76}}
   const deformation=`
     uniform sampler2D botanicalFlow;uniform vec2 botanicalExtent;uniform vec2 botanicalScale;uniform float botanicalActive,botanicalBaseDepth,botanicalLiftDepth;
-    float botanicalDepth(vec2 p){vec2 st=p*botanicalScale/(botanicalExtent*2.)+.5;return botanicalBaseDepth+botanicalLiftDepth*texture2D(botanicalFlow,st).r*botanicalActive;}
+    float botanicalDepth(vec2 p){vec2 st=p*botanicalScale/(botanicalExtent*2.)+.5;vec2 field=texture2D(botanicalFlow,st).rg;return botanicalBaseDepth+botanicalLiftDepth*${mobile ? 'field.r' : '((field.r+field.g)*.5)'}*botanicalActive;}
   `
+  const shadowUniforms={botanicalFlow:uniforms.botanicalFlow,botanicalExtent:uniforms.botanicalExtent,botanicalActive:uniforms.botanicalActive,botanicalShadowMenu:{value:0}}
+  function fieldShadow(shader:Parameters<THREE.MeshStandardMaterial['onBeforeCompile']>[0]){
+    Object.assign(shader.uniforms,shadowUniforms)
+    // 墙面和植物都按世界坐标读取同一场，只调已有定向光投影，不改变底色、光向或几何。
+    shader.vertexShader='varying vec2 botanicalShadowPosition;\n'+shader.vertexShader
+    shader.vertexShader=shader.vertexShader.replace('#include <project_vertex>','botanicalShadowPosition=(modelMatrix*vec4(transformed,1.)).xy;\n#include <project_vertex>')
+    shader.fragmentShader=`
+      uniform sampler2D botanicalFlow;uniform vec2 botanicalExtent;uniform float botanicalActive,botanicalShadowMenu;
+      varying vec2 botanicalShadowPosition;
+      float botanicalShadowWeight(){
+        vec2 field=texture2D(botanicalFlow,botanicalShadowPosition/(botanicalExtent*2.)+.5).rg;
+        float reveal=smoothstep(0.,1.,(field.r+field.g)*botanicalActive);
+        // 无输入只留浅痕；Menu 平滑接回原夜色投影，避免交互场禁用时改变既有菜单背景。
+        return mix(.06+.94*reveal,1.,botanicalShadowMenu);
+      }
+    `+shader.fragmentShader
+    shader.fragmentShader=shader.fragmentShader.replace('#include <lights_fragment_begin>',THREE.ShaderChunk.lights_fragment_begin.replace('directionalLightShadow.shadowIntensity,','directionalLightShadow.shadowIntensity*botanicalShadowWeight(),'))
+  }
+  if(!mobile){wallMaterial.onBeforeCompile=fieldShadow;wallMaterial.customProgramCacheKey=()=> 'botanical-wall-field-shadow-1'}
   stone.onBeforeCompile=shader=>{
     Object.assign(shader.uniforms,uniforms);shader.vertexShader=deformation+shader.vertexShader
     shader.vertexShader=shader.vertexShader.replace('#include <beginnormal_vertex>',`
@@ -82,8 +108,9 @@ onMounted(() => {
       objectNormal.xy-=grad*position.z*objectNormal.z/depth;objectNormal.z/=depth;objectNormal=normalize(objectNormal);
     `)
     shader.vertexShader=shader.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\ntransformed.z=.016+position.z*botanicalDepth(position.xy);')
+    if(!mobile)fieldShadow(shader)
   }
-  stone.customProgramCacheKey=()=> 'botanical-flow-relief-1'
+  stone.customProgramCacheKey=()=> mobile ? 'botanical-flow-relief-1' : 'botanical-flow-relief-field-shadow-1'
   const depthMaterial=new THREE.MeshDepthMaterial({depthPacking:THREE.RGBADepthPacking,side:THREE.DoubleSide})
   depthMaterial.onBeforeCompile=shader=>{
     Object.assign(shader.uniforms,uniforms);shader.vertexShader=deformation+shader.vertexShader
@@ -104,7 +131,7 @@ onMounted(() => {
   },undefined,()=>settled(true))
   let index=0,lastTime=0,lastMove=-10,inside=false,energy=0,aspect=1
   const targetPointer=new THREE.Vector2(.5,.5),easedPointer=targetPointer.clone(),previousPointer=targetPointer.clone()
-  let pressure=0,radius=.15
+  let pressure=0,radius=.15,motion=0
   function pointer(event:PointerEvent){
     if(props.reducedMotion || props.menu>.01 || props.scroll>.15 || props.content>.01){if(!mobile)leave();return}
     if(!mobile){
@@ -157,23 +184,26 @@ onMounted(() => {
     // 页面状态可能在没有新pointer事件时改变，桌面驻留也必须随已有交互禁用条件结束。
     if(!mobile&&(props.reducedMotion || props.menu>.01 || props.scroll>.15 || props.content>.01))inside=false
     const idle=Math.max(0,time-lastMove),moving=inside&&idle<.10
-    const settleTime=mobile ? 2.15 : 2.5
-    const restTime=Math.min(1,Math.max(0,(idle-.10)/(settleTime-.10)))
-    const restBlend=restTime*restTime*(3-2*restTime),moveEndWeight=1-.10/settleTime
-    // 桌面移动段保留原目标；从idle=.10的同值起，连续收束到小范围驻留，离开后强度仍回零。
-    const desiredPressure=inside ? (mobile||moving ? Math.max(0,1-idle/settleTime) : .65+(moveEndWeight-.65)*(1-restBlend)) : 0
+    // 手机保留原衰减；桌面驻留持续写入，离场沿原强度插值回零。
+    const desiredPressure=inside ? (mobile ? Math.max(0,1-idle/2.15) : 1) : 0
     pressure+=(desiredPressure-pressure)*(1-Math.exp(-dt*8))
-    const desiredRadius=mobile ? (moving ? .17 : .035+.135*Math.max(0,1-idle/2.15)) : (moving ? .012+.178*Math.max(0,1-idle/settleTime) : .065+(.012+.178*moveEndWeight-.065)*(1-restBlend))
-    radius+=(Math.min(1,aspect)*desiredRadius-radius)*(1-Math.exp(-dt*5))
+    const desiredRadius=moving ? .17 : .035+.135*Math.max(0,1-idle/2.15)
+    if(mobile)radius+=(Math.min(1,aspect)*desiredRadius-radius)*(1-Math.exp(-dt*5))
+    else radius=.19
     const enabled=!props.reducedMotion&&props.menu<.01&&props.scroll<.15
     flowUniforms.pointer.value.copy(easedPointer);flowUniforms.velocity.value.subVectors(easedPointer,previousPointer)
+    // 速度按内容区高度/秒计量，正常慢移也能写入运动场；停止后只平滑释放速度，不设置收缩时间线。
+    const speed=inside ? Math.min(1,Math.hypot(flowUniforms.velocity.value.x*aspect,flowUniforms.velocity.value.y)/dt*8) : 0
+    motion+=(speed-motion)*(1-Math.exp(-dt*(speed>motion ? 12 : 4)))
+    flowUniforms.motion.value=motion
     flowUniforms.radius.value=radius;flowUniforms.strength.value=enabled ? pressure : 0;flowUniforms.clock.value=time
-    flowUniforms.decay.value=Math.exp(-dt*2.3);flowUniforms.response.value=1-Math.exp(-dt*12);flowUniforms.previous.value=targets[index]!.texture
+    flowUniforms.decay.value=Math.exp(-dt*(mobile ? 2.3 : 3));flowUniforms.response.value=1-flowUniforms.decay.value;flowUniforms.previous.value=targets[index]!.texture
     const next=1-index;gl.setRenderTarget(targets[next]!);gl.render(flowScene,flowCamera);gl.setRenderTarget(null);index=next
     uniforms.botanicalFlow.value=targets[index]!.texture
     uniforms.botanicalActive.value+=((enabled ? 1 : 0)-uniforms.botanicalActive.value)*(1-Math.exp(-dt*8))
     energy=Math.max(pressure,energy*Math.exp(-dt*2.3))
     const menu=props.menu
+    shadowUniforms.botanicalShadowMenu.value=menu
     ambient.intensity=mobile ? 1.25-menu*.85 : ambientBase+(.40-ambientBase)*menu
     sun.intensity=mobile ? 2.9-menu*2.1 : sunBase+(.80-sunBase)*menu
     stone.color.copy(paper).lerp(night,menu);wallMaterial.color.copy(paper).lerp(night,menu)

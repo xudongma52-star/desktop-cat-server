@@ -5,6 +5,11 @@ import { makeThinLeaf } from './botanicalUnifiedLeaves'
 import { makeMainUmbel } from './botanicalMainUmbel'
 import { makeSecondaryUmbel } from './botanicalSecondaryUmbel'
 import { makeRightBroadLeaf } from './botanicalRightBroadLeaves'
+import { makeGinkgoSprig } from './botanicalGinkgoSprig'
+import { makeLowHeartLeaves } from './botanicalLowHeartLeaves'
+import { makeCentralFlowerSprig } from './botanicalCentralFlowerSprig'
+import { makeTrifoliateUnit } from './botanicalTrifoliate'
+import { makePalmLeaf } from './botanicalPalmLeaf'
 
 /** 自制草木曲面：叶缘、叶脉和花梗都是几何；没有采样付费模型或参考站资产。 */
 export function makeBotanicalRelief(mobile: boolean) {
@@ -85,25 +90,38 @@ export function makeBotanicalRelief(mobile: boolean) {
       const t=i/8, p=stem.getPoint(t), side=i%2 ? -1 : 1
       const length=(.63+random()*.48)*(1-t*.35), angle=-side*(.74+random()*.45)
       const b=p.clone().add(point(side*.09,.05,-.06))
+      const leafStart=parts.length
       twig([p,p.clone().lerp(b,.55),b],.008,6)
       const width=length*(.17+random()*.10)
       if(mobile)leaf(b,length,width,angle,phase+i*.7,i%3===0)
       else thinLeaf(b,length,width,angle,phase+i*.7,i%3===0,i)
+      if(!mobile&&phase===5&&i===5) {
+        // 仅底中这株主茎第5叶连同原两段短梗绕真实接点正向转10°；固定根及全部z，保持叶形与内部连接。
+        const transform=new THREE.Matrix4().makeTranslation(p.x,p.y,0)
+          .multiply(new THREE.Matrix4().makeRotationZ(Math.PI/18))
+          .multiply(new THREE.Matrix4().makeTranslation(-p.x,-p.y,0))
+        for(const geometry of parts.slice(leafStart))geometry.applyMatrix4(transform)
+      }
     }
     if(mobile)leaf(stem.getPoint(.94),.48,.085,-.13,phase)
     else thinLeaf(stem.getPoint(.94),.48,.085,-.13,phase,false,1)
     if(!mobile)growLower(stem,phase,phase===5 ? [{t:.40,dx:-.72,dy:.63,n:3},{t:.62,dx:.76,dy:.59,n:3}] : [{t:.29,dx:phase===2 ? 1.05 : -.92,dy:.92,n:4}])
   }
-  function grasses(x: number, height: number, lean: number) {
+  function grasses(x: number, height: number, lean: number, bends?: Array<[number,number]>) {
     const start=parts.length
-    const stem=twig([point(x,-4.55,.05),point(x+lean*.4,-4.3+height*.5,.075),point(x+lean,-4.3+height,.095)],.009,36)
+    // 可选控制点用相对高度和横向偏移描述宽缓转向；根与穗顶固定，未传参的植株保留原曲线。
+    const middle=bends ? bends.map(([t,offset])=>point(x+lean*t+offset,-4.55+(height+.25)*t,.05+.045*t)) : [point(x+lean*.4,-4.3+height*.5,.075)]
+    const stem=twig([point(x,-4.55,.05),...middle,point(x+lean,-4.3+height,.095)],.009,36)
+    // 弯茎的附着点按弧长分布，并沿同一曲线切线转向，避免主轴改变后叶柄悬空或仍机械竖直。
+    const attachment=(t:number)=>bends ? stem.getPointAt(t) : stem.getPoint(t)
+    const direction=(t:number)=>{if(!bends)return 0;const tangent=stem.getTangentAt(t);return -Math.atan2(tangent.x,tangent.y)}
     for (let i=0;i<12;i++) {
-      const t=.72+i*.022,p=stem.getPoint(t),side=i%2 ? 1 : -1
-      leaf(p,.20*(1-(t-.7)*2),.037,-side*.65,i*.7,false,false)
+      const t=.72+i*.022,p=attachment(t),side=i%2 ? 1 : -1
+      leaf(p,.20*(1-(t-.7)*2)*(bends ? 1+.07*Math.sin(i*1.7+.4) : 1),.037,direction(t)-side*(.65+(bends ? .08*Math.sin(i*1.9) : 0)),i*.7,false,false)
     }
     // 穗部保留粒状种子；下部三条是实际草叶，桌面与其他真叶采用同一薄面标准。
     for (let i=0;i<3;i++) {
-      const base=stem.getPoint(.15+i*.19),angle=(i%2 ? 1 : -1)*.46
+      const t=.15+i*.19,base=attachment(t),angle=direction(t)+(i%2 ? 1 : -1)*(.46+(bends ? (i===1 ? .045 : -.025) : 0))
       if(mobile)leaf(base,.85-i*.08,.035,angle,i*.9,false,false)
       else thinLeaf(base,.85-i*.08,.035,angle,i*.9,false,i)
     }
@@ -220,11 +238,24 @@ export function makeBotanicalRelief(mobile: boolean) {
       thinLeaf(tip,.32,.062,direction+.11,phase+branchIndex,false,phase)
     }
   }
-  function branchedSprig(x: number, height: number, lean: number, phase: number) {
-    const stem=gradedTwig([point(x,-4.55,.055),point(x+lean*.23,-4.2+height*.3,.085),point(x+lean*.75,-4.1+height*.7,.1),point(x+lean,-4.2+height,.08)],.012,.0048,54)
+  function branchedSprig(x: number, height: number, lean: number, phase: number, stemOffsets?: [number,number], stemRadiusScale=1) {
+    const stemPoints=[point(x,-4.55,.055),point(x+lean*.23,-4.2+height*.3,.085),point(x+lean*.75,-4.1+height*.7,.1),point(x+lean,-4.2+height,.08)]
+    const originalStem=stemOffsets ? new THREE.CatmullRomCurve3(stemPoints.map(p=>p.clone()),false,'centripetal') : undefined
+    if(stemOffsets){stemPoints[1]!.x+=stemOffsets[0];stemPoints[2]!.x+=stemOffsets[1]}
+    const stem=gradedTwig(stemPoints,.012*stemRadiusScale,.0048*stemRadiusScale,54)
+    // 改主轴后，整条侧枝连同叶柄、叶片和花簇绕新附着点跟随切线转向；内部接点共同变换。
+    function followStem(start:number,t:number) {
+      if(!originalStem)return
+      const base=stem.getPoint(t),before=originalStem.getTangent(t),after=stem.getTangent(t)
+      const angle=Math.atan2(after.y,after.x)-Math.atan2(before.y,before.x)
+      const transform=new THREE.Matrix4().makeTranslation(base.x,base.y,0)
+        .multiply(new THREE.Matrix4().makeRotationZ(angle)).multiply(new THREE.Matrix4().makeTranslation(-base.x,-base.y,0))
+      for(const geometry of parts.slice(start))geometry.applyMatrix4(transform)
+    }
     // 大小、方向与分叉层级不同的枝条，打破一根主轴配等距成对叶片的轮廓。
     const branches=[{t:.24,dx:-.85,dy:.83,n:4},{t:.43,dx:1.15,dy:.70,n:5},{t:.61,dx:-1.20,dy:.62,n:3},{t:.78,dx:.80,dy:.87,n:4}]
     for(let branchIndex=0;branchIndex<branches.length;branchIndex++) {
+      const branchStart=parts.length
       const b=branches[branchIndex]!,base=stem.getPoint(b.t)
       const tip=base.clone().add(point(b.dx,b.dy,.022))
       const curve=gradedTwig([base,base.clone().add(point(b.dx*.46,b.dy*.20,.018)),tip],.0075,.0027,28)
@@ -240,9 +271,14 @@ export function makeBotanicalRelief(mobile: boolean) {
       if(branchIndex%2===0)flowerCluster(tip,.032,phase+branchIndex)
       else thinLeaf(tip,.27,.05,-.16*Math.sign(b.dx),phase+branchIndex,false,branchIndex+1)
       if(base.y<-.65&&branchIndex<2)growLower(curve,phase+branchIndex,[{t:.36,dx:b.dx*.25+(branchIndex ? -.22 : .22),dy:.40+(phase%3)*.09,n:3}])
+      followStem(branchStart,b.t)
     }
-    growLower(stem,phase,[{t:.26+(phase%2)*.025,dx:phase===3 ? 1.2 : phase===7 ? -1.20 : (phase%2 ? .94 : -.91),dy:.92+(phase%3)*.13,n:4}])
+    const lowerStart=parts.length,lowerT=.26+(phase%2)*.025
+    growLower(stem,phase,[{t:lowerT,dx:phase===3 ? 1.2 : phase===7 ? -1.20 : (phase%2 ? .94 : -.91),dy:.92+(phase%3)*.13,n:4}])
+    followStem(lowerStart,lowerT)
+    const tipStart=parts.length
     thinLeaf(stem.getPoint(.98),.33,.052,-.17,phase,false,1)
+    followStem(tipStart,.98)
   }
   // 植物由视口底部生长：两侧成簇，中间较低，上方留出墙面与 Menu 的呼吸空间。
   if (mobile) {
@@ -270,8 +306,13 @@ export function makeBotanicalRelief(mobile: boolean) {
     fern(-1.40,1.40,.15,5,{scale:[.70,.65],angle:-.30,offset:[.12,-.08]})
     for(const geometry of parts.slice(fernStart))geometry.scale(1,1,.32)
   } else {
+    // 三片大小、朝向不同的银杏扇叶补上中偏左空缺；其他植物布局与显露场保持。
+    parts.push(makeGinkgoSprig())
+    // 仅在底中植物带补一组低矮心形阔叶，保留上方中央留白及其他已验收植物。
+    parts.push(makeLowHeartLeaves())
     // 第一轮结构修订：宽裂叶、疏花梗和斜向分枝为主体；两株蕨叶以不同尺度和斜向姿态退到底部配角。
-    branchedSprig(-6.25,7.40,1.22,1);broad(-6.50,4.65,.70,2)
+    // 仅左高株主管体适度增加截面可读性；曲线、原渐细比例和侧枝叶片不变，其他株沿用原半径。
+    branchedSprig(-6.25,7.40,1.22,1,[-.20,.20],1.33);broad(-6.50,4.65,.70,2)
     parts.push(makeSecondaryUmbel().scale(1,1,.70));openUmbel(-4.4,-3.82,-1.1,.48,3,8)
     // 第二轮左侧单株试件已冻结保留；第三轮只统一其余桌面真叶，构图与手机分支不变。
     parts.push(makeStudyPlant());grasses(-6.45,6.45,.08)
@@ -281,7 +322,14 @@ export function makeBotanicalRelief(mobile: boolean) {
     parts.push(makeMainUmbel().scale(1,1,.70))
     branchedSprig(3.15,5.55,1.45,6);branchedSprig(5.10,4.85,-3.6,7)
     dividedPlant(4.45,3.30,1.20,5);broad(6.55,3.8,-.13,6)
-    grasses(6.70,7.55,-.26);grasses(5.10,6.1,-.55);fern(1.20,1.75,-.65,8,{scale:[.72,.80],angle:.23,offset:[.25,-.10]})
+    // 最右侧高草保留两处不等幅转向，右内侧用单次偏弯；左侧细草维持较直长势作对比。
+    grasses(6.70,7.55,-.26,[[.40,-.53],[.73,.07]]);grasses(5.10,6.1,-.55,[[.58,.42]]);fern(1.20,1.75,-.65,8,{scale:[.72,.80],angle:.23,offset:[.25,-.10]})
+    // 中央空白补一组主花、侧花和合拢花苞，不迁移两侧已验收植物。
+    parts.push(makeCentralFlowerSprig())
+    // 中偏左仅补一枚同节点三出复叶，原植物及手机构图保持。
+    parts.push(makeTrifoliateUnit())
+    // 原右侧长杆左方仅补一片连续浅裂掌状叶，旧植物与三出复叶保持。
+    parts.push(makePalmLeaf())
   }
   const geometry=mergeGeometries(parts,false)!
   parts.forEach(part=>part.dispose())
