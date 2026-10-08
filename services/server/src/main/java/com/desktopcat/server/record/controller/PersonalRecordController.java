@@ -152,6 +152,13 @@ public class PersonalRecordController {
         return personalRecordService.listRecalls(userId(principal), limit);
     }
 
+    /** 首页透明图文列表，固定每批十篇，按创建时间倒序。 */
+    @GetMapping("/home-feed")
+    public com.desktopcat.server.record.dto.PersonalRecordHomePageDto homeFeed(
+            @RequestParam(defaultValue = "1") Integer page, Principal principal) {
+        return personalRecordService.listHomeFeed(userId(principal), page);
+    }
+
     private long userId(Principal principal) {
         return currentUserService.requireUserId(principal == null ? null : principal.getName());
     }

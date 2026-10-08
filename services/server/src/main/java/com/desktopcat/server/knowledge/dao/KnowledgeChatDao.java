@@ -31,5 +31,6 @@ public interface KnowledgeChatDao {
             @Param("userId") long userId,
             @Param("chatId") long chatId,
             @Param("version") int version,
-            @Param("updatedAt") Instant updatedAt);
+            @Param("updatedAt") Instant updatedAt,
+            @Param("memory") KnowledgeChatDO memory);
 }

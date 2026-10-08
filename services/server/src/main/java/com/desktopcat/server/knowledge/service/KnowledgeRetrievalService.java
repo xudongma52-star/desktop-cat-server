@@ -14,6 +14,7 @@ import com.desktopcat.server.record.service.PersonalRecordService;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import com.fasterxml.jackson.databind.JsonNode;
 import org.springframework.context.annotation.Profile;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -46,6 +47,12 @@ public class KnowledgeRetrievalService {
             long userId,
             KnowledgeRetrieveRequestDto request,
             List<RagConversationMessageDto> history) {
+        return retrieve(userId, request, history, null);
+    }
+
+    public KnowledgeSearchResultDto retrieve(
+            long userId, KnowledgeRetrieveRequestDto request,
+            List<RagConversationMessageDto> history, JsonNode summary) {
         String question = validateQuestion(request);
         List<RagConversationMessageDto> normalizedHistory = history == null
                 ? List.of()
@@ -74,7 +81,7 @@ public class KnowledgeRetrievalService {
         // Python 从数据库读取当前版本和正文；内部请求只传 ID，避免重复传输所有文章。
         RagRetrieveResponseDto response = ragServiceClient.retrieve(
                 new RagRetrieveRequestDto(userId, question, TOP_K,
-                        List.copyOf(sourceRecords.keySet()), normalizedHistory));
+                        List.copyOf(sourceRecords.keySet()), normalizedHistory, summary));
 
         List<KnowledgeMatchDto> matches = response.matches().stream()
                 .map(match -> toKnowledgeMatch(match, sourceRecords))

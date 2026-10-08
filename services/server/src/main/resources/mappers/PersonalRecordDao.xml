@@ -13,7 +13,9 @@
     rag_enabled,
     version,
     created_at,
-    updated_at
+    updated_at,
+    cover_image_key,
+    home_excerpt
   </sql>
 
   <sql id="activeRecordSummaryColumns">
@@ -28,7 +30,9 @@
     rag_enabled,
     version,
     created_at,
-    updated_at
+    updated_at,
+    cover_image_key,
+    home_excerpt
   </sql>
 
   <insert id="insertRecord" parameterType="com.desktopcat.server.record.dao.PersonalRecordDO"
@@ -41,7 +45,9 @@
       record_date,
       mood,
       recall_enabled,
-      rag_enabled
+      rag_enabled,
+      cover_image_key,
+      home_excerpt
     ) VALUES (
       #{userId},
       #{recordType},
@@ -50,7 +56,9 @@
       #{recordDate},
       #{mood},
       #{recallEnabled},
-      #{ragEnabled}
+      #{ragEnabled},
+      #{coverImageKey},
+      #{homeExcerpt}
     )
   </insert>
 
@@ -72,8 +80,12 @@
     </if>
     <if test="recallEnabled != null">
       AND recall_enabled = #{recallEnabled}
+      <if test="recallEnabled == true">AND cover_image_key IS NOT NULL</if>
     </if>
-    ORDER BY record_date DESC, record_id DESC
+    <choose>
+      <when test="recallEnabled == true">ORDER BY created_at DESC, record_id DESC</when>
+      <otherwise>ORDER BY record_date DESC, record_id DESC</otherwise>
+    </choose>
     OFFSET #{offset}
     LIMIT #{limit}
   </select>
@@ -88,6 +100,7 @@
     </if>
     <if test="recallEnabled != null">
       AND recall_enabled = #{recallEnabled}
+      <if test="recallEnabled == true">AND cover_image_key IS NOT NULL</if>
     </if>
   </select>
 
@@ -113,6 +126,8 @@
         mood = #{mood},
         recall_enabled = #{recallEnabled},
         rag_enabled = #{ragEnabled},
+        cover_image_key = #{coverImageKey},
+        home_excerpt = #{homeExcerpt},
         version = version + 1,
         updated_at = CURRENT_TIMESTAMP
     WHERE record_id = #{recordId}

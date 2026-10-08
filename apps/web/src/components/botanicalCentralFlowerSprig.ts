@@ -29,7 +29,7 @@ export function makeCentralFlowerSprig(includeMainHead=true) {
   const headUv:number[]=[]
   for(let i=0;i<flowerMesh.position.length;i+=3)headUv.push(flowerMesh.position[i]!/14.22+.5,flowerMesh.position[i+1]!/8+.5)
   heads.setAttribute('uv',new THREE.Float32BufferAttribute(headUv,2))
-  // 桌面两朵花均由逐瓣描边投影网格承载；手机保留原花头，花苞及叶片仍由本组绘制。
+  // 桌面两朵花及重建主副茎均由投影网格承载；本组只补花苞和附着细叶，手机保留原花头。
   const headIndices=includeMainHead ? flowerMesh.index : []
   heads.setIndex(headIndices);parts.push(heads)
   // 新主花锚定墙面，茎端降至花盘背后，避免原较高接点穿过薄花瓣正面。
@@ -45,8 +45,10 @@ export function makeCentralFlowerSprig(includeMainHead=true) {
     return {point:main.getPoint((low+high)/2),tangent:main.getTangent((low+high)/2)}
   }
   // 分枝保持旧纵向位置，只沿新弯茎重新接合；次花和花苞端点不移动。
-  const sideRoot=includeMainHead ? main.getPoint(.53) : mainAtHeight(legacyMain.getPoint(.53).y).point
-  const side=stalk([sideRoot,sideRoot.clone().lerp(secondaryHead,.46).add(p(.16,-.12,.002)),secondaryHead],.008,36)
+  const sideRoot=includeMainHead ? main.getPoint(.53) : p(...tracedFlower.secondaryStemControlPoints[0] as [number,number,number])
+  // 桌面副茎从 Blender 的同一控制点取接点和切线；不再叠加旧细管，侧叶仍沿实际副茎附着。
+  const sidePoints=includeMainHead ? [sideRoot,sideRoot.clone().lerp(secondaryHead,.46).add(p(.16,-.12,.002)),secondaryHead] : tracedFlower.secondaryStemControlPoints.map(point=>p(point[0]!,point[1]!,point[2]!))
+  const side=stalk(sidePoints,.008,36,includeMainHead)
   const budRoot=includeMainHead ? main.getPoint(.82) : mainAtHeight(legacyMain.getPoint(.82).y).point,budBase=budCenter.clone().add(p(0,-.125,0))
   stalk([budRoot,budRoot.clone().lerp(budBase,.55).add(p(.12,.08,.005)),budBase],.0045,32)
   // 三片细长薄瓣合拢为花苞，保留原基部接点；不再用整颗椭圆球及两根凸起分缝。

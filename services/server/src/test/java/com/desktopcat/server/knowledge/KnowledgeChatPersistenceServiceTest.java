@@ -34,7 +34,7 @@ class KnowledgeChatPersistenceServiceTest {
         chat.setVersion(2);
         chat.setCreatedAt(Instant.EPOCH);
         chat.setUpdatedAt(Instant.EPOCH);
-        when(chatDao.updateAfterMessage(eq(7L), eq(12L), eq(2), any())).thenReturn(0);
+        when(chatDao.updateAfterMessage(eq(7L), eq(12L), eq(2), any(), eq(chat))).thenReturn(0);
 
         assertThatThrownBy(() -> service.appendTurn(
                 7L, chat, "继续提问", "新的回答", List.of()))

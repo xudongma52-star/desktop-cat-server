@@ -26,6 +26,7 @@ import com.desktopcat.server.knowledge.service.KnowledgeChatPersistenceService;
 import com.desktopcat.server.knowledge.service.KnowledgeChatService;
 import com.desktopcat.server.knowledge.service.KnowledgeMemoryStore;
 import com.desktopcat.server.knowledge.service.KnowledgeRetrievalService;
+import com.desktopcat.server.knowledge.service.KnowledgeCompressionService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
 import java.util.List;
@@ -41,13 +42,14 @@ class KnowledgeChatServiceTest {
     private final KnowledgeChatPersistenceService persistenceService =
             mock(KnowledgeChatPersistenceService.class);
     private final KnowledgeMemoryStore memoryStore = mock(KnowledgeMemoryStore.class);
+    private final KnowledgeCompressionService compressionService = mock(KnowledgeCompressionService.class);
     private KnowledgeChatService service;
 
     @BeforeEach
     void setUp() {
         service = new KnowledgeChatService(
                 chatDao, messageDao, retrievalService, persistenceService,
-                memoryStore, new ObjectMapper());
+                memoryStore, new ObjectMapper(), compressionService);
     }
 
     @Test
@@ -61,7 +63,9 @@ class KnowledgeChatServiceTest {
         KnowledgeChatResponseDto persisted = response(12L, 3);
         when(chatDao.selectActiveById(7L, 12L)).thenReturn(chat);
         when(memoryStore.loadHistory(eq(7L), eq(chat), any())).thenReturn(history);
-        when(retrievalService.retrieve(eq(7L), any(KnowledgeRetrieveRequestDto.class), eq(history)))
+        when(compressionService.prepare(7L, chat, history))
+                .thenReturn(new KnowledgeCompressionService.Context(null, history));
+        when(retrievalService.retrieve(eq(7L), any(KnowledgeRetrieveRequestDto.class), eq(history), eq(null)))
                 .thenReturn(searchResult);
         when(persistenceService.appendTurn(
                 7L, chat, "那后来呢？", "新的回答", List.of()))
@@ -73,7 +77,7 @@ class KnowledgeChatServiceTest {
         assertThat(result.chat().version()).isEqualTo(3);
         ArgumentCaptor<KnowledgeRetrieveRequestDto> questionCaptor =
                 ArgumentCaptor.forClass(KnowledgeRetrieveRequestDto.class);
-        verify(retrievalService).retrieve(eq(7L), questionCaptor.capture(), eq(history));
+        verify(retrievalService).retrieve(eq(7L), questionCaptor.capture(), eq(history), eq(null));
         assertThat(questionCaptor.getValue().question()).isEqualTo("那后来呢？");
         verify(memoryStore).append(
                 7L, 12L, 3, persisted.userMessage(), persisted.assistantMessage());
@@ -89,6 +93,27 @@ class KnowledgeChatServiceTest {
                 .hasMessageContaining("Knowledge chat was not found");
 
         verify(memoryStore).markMissing(7L, 99L);
+    }
+
+    @Test
+    void answerFailureDoesNotPersistOrCacheGeneratedSummary() throws Exception {
+        KnowledgeChatDO chat = chat(12L, 7L, 20);
+        when(chatDao.selectActiveById(7L, 12L)).thenReturn(chat);
+        when(memoryStore.loadHistory(eq(7L), eq(chat), any())).thenReturn(List.of());
+        var summary = new ObjectMapper().readTree("{\"topic\":\"项目A\"}");
+        when(compressionService.prepare(eq(7L), eq(chat), any())).thenAnswer(invocation -> {
+            chat.setMemorySummary(summary.toString());
+            chat.setSummaryThroughMessageId(30L);
+            return new KnowledgeCompressionService.Context(summary, List.of());
+        });
+        when(retrievalService.retrieve(eq(7L), any(), eq(List.of()), eq(summary)))
+                .thenThrow(new IllegalStateException("RAG unavailable"));
+
+        assertThatThrownBy(() -> service.chat(7L, new KnowledgeChatRequestDto(12L, "继续")))
+                .isInstanceOf(IllegalStateException.class);
+        verifyNoInteractions(persistenceService);
+        verify(memoryStore, never()).cacheSummary(eq(7L), any());
+        verify(memoryStore, never()).append(anyLong(), anyLong(), any(Integer.class), any(), any());
     }
 
     @Test

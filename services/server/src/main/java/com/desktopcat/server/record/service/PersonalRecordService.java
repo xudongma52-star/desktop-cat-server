@@ -24,5 +24,7 @@ public interface PersonalRecordService {
 
     void deleteRecord(long userId, Long recordId, Integer version);
 
+    com.desktopcat.server.record.dto.PersonalRecordHomePageDto listHomeFeed(long userId, Integer page);
+
     List<PersonalRecordRecallDto> listRecalls(long userId, Integer limit);
 }

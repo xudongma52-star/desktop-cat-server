@@ -119,7 +119,7 @@ class PersonalRecordControllerTest {
             return 1;
         });
 
-        PersonalRecordService service = new PersonalRecordServiceImpl(personalRecordDao);
+        PersonalRecordService service = new PersonalRecordServiceImpl(personalRecordDao, mock(com.desktopcat.server.record.service.RecordImageStorageService.class));
         when(currentUserService.requireUserId(nullable(String.class))).thenReturn(USER_ID);
         mvc = MockMvcBuilders.standaloneSetup(
                         new PersonalRecordController(service, currentUserService))
@@ -140,6 +140,7 @@ class PersonalRecordControllerTest {
                                   "recordDate":"2026-09-16",
                                   "mood":"  开心  ",
                                   "recallEnabled":true,
+                                  "coverImageKey":"record-images/1/00000000-0000-0000-0000-000000000001.png",
                                   "ragEnabled":false
                                 }
                                 """))
@@ -331,6 +332,29 @@ class PersonalRecordControllerTest {
                 .andExpect(jsonPath("$.code").value("ACTIVITY_DATE_RANGE_TOO_LARGE"));
     }
 
+    @Test
+    void pagesHomeFeedTenAtATimeInCreationOrder() throws Exception {
+        for (int i = 0; i < 13; i++) createRecord("Home " + i, "Text " + i, true, "2026-09-16");
+        createRecord("Private", "Not on home", false, "2026-09-17");
+        mvc.perform(get("/api/records/home-feed").param("page", "1"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.items", hasSize(10)))
+                .andExpect(jsonPath("$.items[0].title").value("Home 12"))
+                .andExpect(jsonPath("$.hasMore").value(true));
+        mvc.perform(get("/api/records/home-feed").param("page", "2"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.items", hasSize(3)))
+                .andExpect(jsonPath("$.items[0].title").value("Home 2"))
+                .andExpect(jsonPath("$.hasMore").value(false));
+    }
+
+    @Test
+    void refusesHomeArticleWithoutImageButAllowsOrdinaryArticle() throws Exception {
+        String body = "{\"recordType\":\"DIARY\",\"content\":\"Text\",\"recordDate\":\"2026-09-16\",\"recallEnabled\":true}";
+        mvc.perform(post("/api/records").contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isBadRequest());
+        mvc.perform(post("/api/records").contentType(MediaType.APPLICATION_JSON).content(body.replace("true", "false")))
+                .andExpect(status().isCreated());
+    }
+
     private void createRecord(String title, String content, boolean recallEnabled, String recordDate)
             throws Exception {
         String requestBody = """
@@ -340,6 +364,7 @@ class PersonalRecordControllerTest {
                   "content":"%s",
                   "recordDate":"%s",
                   "recallEnabled":%s,
+                  "coverImageKey":"record-images/1/00000000-0000-0000-0000-000000000001.png",
                   "ragEnabled":false
                 }
                 """.formatted(title, content.replace("\n", "\\n"), recordDate, recallEnabled);
@@ -355,20 +380,25 @@ class PersonalRecordControllerTest {
                 .comparing(PersonalRecordDO::getRecordDate)
                 .thenComparing(PersonalRecordDO::getRecordId)
                 .reversed();
+        if (Boolean.TRUE.equals(recallEnabled)) ordering = Comparator.comparing(PersonalRecordDO::getCreatedAt).thenComparing(PersonalRecordDO::getRecordId).reversed();
         return records.values().stream()
                 .filter(record -> record.getUserId() == userId)
                 .filter(record -> recordType == null || recordType.equals(record.getRecordType()))
                 .filter(record -> recallEnabled == null || recallEnabled.equals(record.getRecallEnabled()))
+                .filter(record -> !Boolean.TRUE.equals(recallEnabled) || record.getCoverImageKey() != null)
                 .sorted(ordering)
                 .toList();
     }
 
     private PersonalRecordDO copy(PersonalRecordDO source) {
-        return new PersonalRecordDO(
+        PersonalRecordDO copy = new PersonalRecordDO(
                 source.getRecordId(), source.getUserId(), source.getRecordType(),
                 source.getTitle(), source.getContent(),
                 source.getRecordDate(), source.getMood(), source.getRecallEnabled(), source.getRagEnabled(),
                 source.getVersion(), source.getCreatedAt(), source.getUpdatedAt());
+        copy.setCoverImageKey(source.getCoverImageKey());
+        copy.setHomeExcerpt(source.getHomeExcerpt());
+        return copy;
     }
 
     private PersonalRecordDO copyWithState(

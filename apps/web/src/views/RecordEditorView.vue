@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { ApiError, describeApiError } from '../api/http'
-import { createRecord, getRecord, todayInLocalTime, updateRecord } from '../api/records'
+import { createRecord, getRecord, todayInLocalTime, updateRecord, uploadRecordImage } from '../api/records'
 import type { RecordInput, RecordType } from '../api/records'
 import MarkdownContent from '../components/MarkdownContent.vue'
 
@@ -14,6 +14,8 @@ interface RecordFormState {
   mood: string
   recallEnabled: boolean
   ragEnabled: boolean
+  coverImageKey: string
+  homeExcerpt: string
 }
 
 const route = useRoute()
@@ -29,6 +31,9 @@ const saving = ref(false)
 const previewing = ref(false)
 const error = ref('')
 const fieldError = ref('')
+const imageUrl = ref('')
+const imageUploading = ref(false)
+let imageUpload: AbortController | undefined
 const form = reactive<RecordFormState>(emptyForm())
 let loadGeneration = 0
 
@@ -41,10 +46,15 @@ function emptyForm(): RecordFormState {
     mood: '',
     recallEnabled: false,
     ragEnabled: false,
+    coverImageKey: '',
+    homeExcerpt: '',
   }
 }
 
 function resetForm() {
+  imageUpload?.abort()
+  imageUploading.value = false
+  imageUrl.value = ''
   Object.assign(form, emptyForm())
   previewing.value = false
   version.value = null
@@ -71,6 +81,9 @@ async function loadRecord(): Promise<boolean> {
     form.mood = record.mood ?? ''
     form.recallEnabled = record.recallEnabled
     form.ragEnabled = record.ragEnabled
+    form.coverImageKey = record.coverImageKey ?? ''
+    form.homeExcerpt = record.homeExcerpt ?? ''
+    imageUrl.value = record.imageUrl ?? ''
     version.value = record.version
     return true
   } catch (caught) {
@@ -92,6 +105,10 @@ function validate(): boolean {
     fieldError.value = '请选择这篇记录对应的日期。'
     return false
   }
+  if (form.recallEnabled && !form.coverImageKey) {
+    fieldError.value = '请为首页文章上传一张配图。'
+    return false
+  }
   return true
 }
 
@@ -104,11 +121,13 @@ function buildInput(): RecordInput {
     mood: form.mood.trim() || null,
     recallEnabled: form.recallEnabled,
     ragEnabled: form.ragEnabled,
+    coverImageKey: form.coverImageKey,
+    homeExcerpt: form.homeExcerpt,
   }
 }
 
 async function saveRecord() {
-  if (saving.value || !validate()) return
+  if (saving.value || imageUploading.value || !validate()) return
   saving.value = true
   error.value = ''
   try {
@@ -134,9 +153,32 @@ async function saveRecord() {
   }
 }
 
+async function chooseImage(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  imageUpload?.abort()
+  const controller = new AbortController()
+  imageUpload = controller
+  imageUploading.value = true
+  fieldError.value = ''
+  try {
+    const result = await uploadRecordImage(file, controller.signal)
+    if (controller.signal.aborted) return
+    form.coverImageKey = result.imageKey
+    imageUrl.value = result.imageUrl
+  } catch (caught) {
+    if (!controller.signal.aborted) fieldError.value = describeApiError(caught, '配图上传失败。')
+  } finally {
+    if (imageUpload === controller) imageUploading.value = false
+    input.value = ''
+  }
+}
+
 watch(() => route.fullPath, () => void loadRecord(), { immediate: true })
 onBeforeUnmount(() => {
   loadGeneration += 1
+  imageUpload?.abort()
 })
 </script>
 
@@ -170,6 +212,7 @@ onBeforeUnmount(() => {
               <option value="DIARY">日记</option>
               <option value="THOUGHT">心得</option>
               <option value="WORK_NOTE">实习笔记</option>
+              <option value="NOTE">笔记</option>
             </select>
           </label>
           <label class="field">
@@ -201,12 +244,24 @@ onBeforeUnmount(() => {
           <small class="field-count">{{ form.mood.length }} / 32</small>
         </label>
 
+        <div class="article-image-field">
+          <label class="article-image-upload">
+            <span>{{ imageUploading ? '上传中…' : imageUrl ? '更换首页配图' : '上传首页配图' }}</span>
+            <input type="file" accept="image/jpeg,image/png,image/webp" :disabled="imageUploading || saving" @change="chooseImage" />
+          </label>
+          <img v-if="imageUrl" :src="imageUrl" alt="首页配图预览" />
+        </div>
+        <label class="field">
+          <span>首页摘要 <small>选填，留空时从正文生成</small></span>
+          <textarea v-model="form.homeExcerpt" rows="3" placeholder="想在首页展示的一段文字" />
+        </label>
+
         <fieldset class="preference-fields">
           <legend>让这篇记录去哪里</legend>
           <label class="toggle-field">
             <input v-model="form.recallEnabled" type="checkbox" />
             <span class="toggle-control" aria-hidden="true"></span>
-            <span><strong>加入温馨回忆</strong><small>它会出现在首页的文章轮播中。</small></span>
+            <span><strong>加入首页图文</strong><small>搭配一张图片，在首页展示这篇文章。</small></span>
           </label>
           <label class="toggle-field">
             <input v-model="form.ragEnabled" type="checkbox" />
@@ -218,7 +273,7 @@ onBeforeUnmount(() => {
         <p v-if="fieldError" class="field-error" role="alert">{{ fieldError }}</p>
         <div class="form-actions">
           <RouterLink class="button secondary" :to="editing && recordId ? `/records/${recordId}` : '/records'">取消</RouterLink>
-          <button class="button prominent" type="submit" :disabled="saving">
+          <button class="button prominent" type="submit" :disabled="saving || imageUploading">
             {{ saving ? '保存中…' : editing ? '保存修改' : '保存这篇记录' }}
           </button>
         </div>
@@ -228,6 +283,10 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.article-image-field { display: grid; gap: 14px; justify-items: start; }
+.article-image-field img { max-width: 100%; max-height: 360px; object-fit: contain; }
+.article-image-upload { cursor: pointer; color: #4e6755; }
+.article-image-upload input { display: block; margin-top: 8px; max-width: 100%; }
 .body-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .body-heading b { color: #a55f51; }
 .body-heading small { margin-left: 5px; color: #959c94; font-weight: 400; }

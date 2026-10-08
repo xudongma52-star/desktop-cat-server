@@ -3,6 +3,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { deleteCarouselPhoto, getCarouselPhotos, uploadCarouselPhoto } from '../api/photos'
 import type { CarouselPhoto } from '../api/photos'
 import { describeApiError } from '../api/http'
+import CurvedPhotoStrip from './CurvedPhotoStrip.vue'
 
 const CROP_WIDTH = 800
 const CROP_HEIGHT = 600
@@ -28,76 +29,32 @@ const offsetY = ref(0)
 const fileInput = ref<HTMLInputElement | null>(null)
 const cropCanvas = ref<HTMLCanvasElement | null>(null)
 
-let timer: number | undefined
 let motionQuery: MediaQueryList | undefined
 let sourceImage: HTMLImageElement | null = null
 let sourceUrl = ''
 let dragPointerId: number | null = null
 let dragClientX = 0
 let dragClientY = 0
-let disposed = false
 
 const canRotate = computed(() => photos.value.length > 1)
 const isAutoPaused = computed(() => paused.value || cropOpen.value || reducedMotion.value)
 const currentPhoto = computed(() => photos.value[currentIndex.value] ?? null)
-const visiblePhotos = computed(() => {
-  const count = photos.value.length
-  if (count === 0) return []
-  if (count === 1) return [{ photo: photos.value[0], position: 'center' }]
-  if (count === 2) {
-    return [
-      { photo: photos.value[currentIndex.value], position: 'center' },
-      { photo: photos.value[(currentIndex.value + 1) % count], position: 'right' },
-    ]
-  }
-  return [
-    { photo: photos.value[(currentIndex.value - 1 + count) % count], position: 'left' },
-    { photo: photos.value[currentIndex.value], position: 'center' },
-    { photo: photos.value[(currentIndex.value + 1) % count], position: 'right' },
-  ]
-})
-
-function stopTimer() {
-  if (timer !== undefined) {
-    window.clearInterval(timer)
-    timer = undefined
-  }
-}
-
-function startTimer() {
-  stopTimer()
-  if (disposed || !canRotate.value || isAutoPaused.value) return
-  timer = window.setInterval(() => move(1), 3000)
-}
-
 function move(step: number) {
   if (!canRotate.value) return
   currentIndex.value = (currentIndex.value + step + photos.value.length) % photos.value.length
-  startTimer()
-}
-
-function showPhoto(photoId: number) {
-  const index = photos.value.findIndex((photo) => photo.photoId === photoId)
-  if (index >= 0 && index !== currentIndex.value) {
-    currentIndex.value = index
-    startTimer()
-  }
 }
 
 function togglePause() {
   paused.value = !paused.value
-  startTimer()
 }
 
 function handleMotionChange(event: MediaQueryListEvent) {
   reducedMotion.value = event.matches
-  startTimer()
 }
 
 async function loadPhotos() {
   loading.value = true
   error.value = ''
-  stopTimer()
   try {
     photos.value = await getCarouselPhotos()
     currentIndex.value = 0
@@ -105,7 +62,6 @@ async function loadPhotos() {
     error.value = describeApiError(caught, '照片暂时没有加载成功，请稍后再试。')
   } finally {
     loading.value = false
-    startTimer()
   }
 }
 
@@ -144,7 +100,6 @@ async function handleFileSelection(event: Event) {
     cropOpen.value = true
     await nextTick()
     drawCrop()
-    startTimer()
   }
   image.onerror = () => {
     error.value = '这张图片无法读取，请换一张试试。'
@@ -268,7 +223,6 @@ async function submitCrop() {
     }
   } finally {
     uploading.value = false
-    startTimer()
   }
 }
 
@@ -285,7 +239,6 @@ function closeCrop() {
   dragPointerId = null
   closeSourceImage()
   resetFileInput()
-  startTimer()
 }
 
 async function deleteCurrentPhoto() {
@@ -305,7 +258,6 @@ async function deleteCurrentPhoto() {
     error.value = describeApiError(caught, '删除失败，请稍后再试。')
   } finally {
     deleting.value = false
-    startTimer()
   }
 }
 
@@ -322,8 +274,6 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
-  disposed = true
-  stopTimer()
   closeSourceImage()
   motionQuery?.removeEventListener('change', handleMotionChange)
   window.removeEventListener('keydown', handleKeydown)
@@ -333,13 +283,9 @@ onBeforeUnmount(() => {
 <template>
   <section
     class="photo-section"
-    aria-labelledby="photo-carousel-title"
+    aria-label="照片轮播"
   >
-    <div class="section-top photo-section-heading">
-      <div>
-        <p class="eyebrow">温馨回忆 · 照片</p>
-        <h2 id="photo-carousel-title">让喜欢的画面，在回家时迎接你</h2>
-      </div>
+    <div class="photo-section-heading">
       <div class="photo-heading-actions">
         <input
           ref="fileInput"
@@ -348,50 +294,33 @@ onBeforeUnmount(() => {
           accept="image/jpeg,image/png,image/webp"
           @change="handleFileSelection"
         />
-        <button type="button" class="button photo-upload-button" :disabled="uploading" @click="choosePhoto">
+        <button type="button" class="photo-upload-button" :disabled="uploading" @click="choosePhoto">
           <span aria-hidden="true">＋</span> 上传照片
         </button>
       </div>
     </div>
 
     <p v-if="error" class="photo-alert" role="alert">{{ error }}</p>
-    <div v-if="loading" class="state-panel photo-state" role="status">正在整理你的照片…</div>
-    <div v-else-if="photos.length === 0" class="state-panel photo-empty">
-      <span class="empty-icon" aria-hidden="true">🖼️</span>
-      <div>
-        <h3>这里还在等第一张照片</h3>
-        <p>上传后先裁成统一的 4:3，照片会自动加入轮播。</p>
-      </div>
-      <button type="button" class="button" @click="choosePhoto">选择照片</button>
-    </div>
-    <div v-else class="photo-carousel-shell">
+    <span v-if="loading" class="visually-hidden" role="status">加载中</span>
+    <div v-if="photos.length" class="photo-carousel-shell">
       <div class="photo-stage" aria-live="polite">
-        <TransitionGroup name="photo-shift">
-          <button
-            v-for="item in visiblePhotos"
-            :key="item.photo.photoId"
-            type="button"
-            class="photo-slide"
-            :class="`photo-slide--${item.position}`"
-            :aria-label="item.position === 'center' ? '当前照片' : '切换到这张照片'"
-            :tabindex="item.position === 'center' ? -1 : 0"
-            @click="showPhoto(item.photo.photoId)"
-          >
-            <img :src="item.photo.contentUrl" alt="轮播中的生活照片" draggable="false" />
-          </button>
-        </TransitionGroup>
+        <CurvedPhotoStrip
+          :photos="photos"
+          :index="currentIndex"
+          :paused="isAutoPaused || loading || deleting"
+          @change="currentIndex = $event"
+        />
       </div>
       <div class="photo-carousel-footer">
         <div class="photo-carousel-controls" aria-label="照片轮播控制">
           <button type="button" class="icon-button" aria-label="上一张照片" @click="move(-1)">←</button>
-          <span class="carousel-count">{{ currentIndex + 1 }} / {{ photos.length }}</span>
           <button type="button" class="icon-button" aria-label="下一张照片" @click="move(1)">→</button>
-          <button type="button" class="pause-button" :disabled="reducedMotion" @click="togglePause">
-            {{ reducedMotion ? '已关闭自动轮播' : paused ? '继续轮播' : '暂停轮播' }}
+          <button type="button" class="pause-button" :aria-label="paused ? '继续轮播' : '暂停轮播'" :title="reducedMotion ? '已关闭自动轮播' : paused ? '继续轮播' : '暂停轮播'" :disabled="reducedMotion" @click="togglePause">
+            <span aria-hidden="true">{{ paused ? '▷' : 'Ⅱ' }}</span>
           </button>
         </div>
-        <button type="button" class="photo-delete-button" :disabled="deleting" @click="deleteCurrentPhoto">
-          {{ deleting ? '移除中…' : '移出轮播' }}
+        <button type="button" class="photo-delete-button" aria-label="移出轮播" title="移出轮播" :disabled="deleting" @click="deleteCurrentPhoto">
+          <span aria-hidden="true">×</span>
         </button>
       </div>
     </div>
@@ -402,12 +331,11 @@ onBeforeUnmount(() => {
       <section class="crop-dialog" role="dialog" aria-modal="true" aria-labelledby="crop-title">
         <div class="crop-dialog-heading">
           <div>
-            <p class="eyebrow">上传前整理一下</p>
-            <h2 id="crop-title">裁成适合轮播的 4:3 画面</h2>
+            <h2 id="crop-title">裁剪照片</h2>
           </div>
           <button type="button" class="crop-close" aria-label="关闭裁剪窗口" :disabled="uploading" @click="closeCrop">×</button>
         </div>
-        <p class="crop-hint">拖动画面调整位置，用滑块放大。保存后会生成统一的 1200 × 900 图片。</p>
+        <p class="crop-hint">拖动调整位置，滑动缩放。</p>
         <div class="crop-canvas-frame">
           <canvas
             ref="cropCanvas"
@@ -437,3 +365,104 @@ onBeforeUnmount(() => {
     </div>
   </Teleport>
 </template>
+
+<style scoped>
+.photo-section {
+  position: relative;
+  width: min(1100px, 100%);
+  margin: 0 auto 56px;
+  padding: 0;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.photo-section-heading {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.photo-heading-actions {
+  width: auto;
+}
+
+.photo-upload-button {
+  width: auto;
+  min-width: 0;
+  padding: 7px 0 7px 10px;
+  color: var(--ink);
+  background: transparent;
+  border-radius: 0;
+}
+
+.photo-upload-button:hover {
+  color: #2f6346;
+  background: transparent;
+}
+
+.photo-carousel-shell {
+  margin-top: 8px;
+}
+
+.photo-stage {
+  min-height: 0;
+  aspect-ratio: 100 / 48;
+  border-radius: 0;
+  background: transparent;
+}
+
+.photo-stage::after {
+  display: none;
+}
+
+.photo-slide,
+.photo-slide:hover {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+/* 操作控件保留，默认融入画面，鼠标或键盘进入轮播时才显现。 */
+.photo-carousel-footer {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  left: 12px;
+  margin: 0;
+  flex-direction: row;
+  align-items: center;
+  opacity: 0;
+  transition: opacity .18s ease;
+}
+
+.photo-carousel-shell:hover .photo-carousel-footer,
+.photo-carousel-shell:focus-within .photo-carousel-footer {
+  opacity: 1;
+}
+
+.photo-carousel-controls {
+  width: auto;
+}
+
+.icon-button,
+.pause-button,
+.photo-delete-button {
+  min-width: 32px;
+  min-height: 32px;
+  padding: 6px;
+  color: var(--ink);
+  border: 0;
+  background: rgba(244, 242, 236, .8);
+}
+
+@media (hover: none), (prefers-reduced-motion: reduce) {
+  .photo-carousel-footer { opacity: 1; }
+}
+
+@media (max-width: 700px) {
+  .photo-stage { aspect-ratio: 100 / 59; }
+}
+</style>

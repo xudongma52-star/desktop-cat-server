@@ -6,6 +6,7 @@ import com.desktopcat.server.knowledge.dto.KnowledgeMessageDto;
 import com.desktopcat.server.knowledge.dto.RagConversationMessageDto;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.JsonNode;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -126,6 +127,55 @@ public class KnowledgeMemoryStore {
         }
     }
 
+    public JsonNode loadSummary(long userId, KnowledgeChatDO chat) {
+        if (chat.getMemorySummary() == null) {
+            return null;
+        }
+        String key = summaryKey(userId, chat.getChatId());
+        try {
+            List<Object> results = redisTemplate.executePipelined(new SessionCallback<>() {
+                @Override
+                public <K, V> Object execute(RedisOperations<K, V> operations) {
+                    RedisOperations<String, String> strings = stringOperations(operations);
+                    strings.opsForValue().get(key);
+                    strings.expire(key, cacheTtl());
+                    return null;
+                }
+            });
+            if (!results.isEmpty() && results.getFirst() instanceof String payload) {
+                CachedSummary cached = objectMapper.readValue(payload, CachedSummary.class);
+                if (cached.throughMessageId() == chat.getSummaryThroughMessageId()
+                        && cached.content().equals(objectMapper.readTree(chat.getMemorySummary()))) {
+                    return cached.content();
+                }
+            }
+        } catch (RuntimeException | JsonProcessingException exception) {
+            log.warn("event=knowledge_summary_cache_load_failed userId={} chatId={}",
+                    userId, chat.getChatId());
+        }
+        cacheSummary(userId, chat);
+        try {
+            return objectMapper.readTree(chat.getMemorySummary());
+        } catch (JsonProcessingException exception) {
+            throw new IllegalStateException("Knowledge summary could not be read.", exception);
+        }
+    }
+
+    /** 仅缓存数据库已提交的摘要；覆盖位置以数据库为准，旧缓存不能推进记忆。 */
+    public void cacheSummary(long userId, KnowledgeChatDO chat) {
+        if (chat.getMemorySummary() == null) {
+            return;
+        }
+        try {
+            String payload = objectMapper.writeValueAsString(new CachedSummary(
+                    chat.getSummaryThroughMessageId(), objectMapper.readTree(chat.getMemorySummary())));
+            redisTemplate.opsForValue().set(summaryKey(userId, chat.getChatId()), payload, cacheTtl());
+        } catch (RuntimeException | JsonProcessingException exception) {
+            log.warn("event=knowledge_summary_cache_write_failed userId={} chatId={}",
+                    userId, chat.getChatId());
+        }
+    }
+
     public boolean isMissing(long userId, long chatId) {
         try {
             return Boolean.TRUE.equals(redisTemplate.hasKey(missingKey(userId, chatId)));
@@ -141,7 +191,7 @@ public class KnowledgeMemoryStore {
                 public <K, V> Object execute(RedisOperations<K, V> operations) {
                     RedisOperations<String, String> stringOperations = stringOperations(operations);
                     stringOperations.delete(List.of(
-                            messagesKey(userId, chatId), versionKey(userId, chatId)));
+                            messagesKey(userId, chatId), versionKey(userId, chatId), summaryKey(userId, chatId)));
                     stringOperations.opsForValue().set(missingKey(userId, chatId), "1", MISSING_TTL);
                     return null;
                 }
@@ -188,7 +238,11 @@ public class KnowledgeMemoryStore {
             }
             try {
                 CachedMessage message = objectMapper.readValue(text, CachedMessage.class);
-                messages.add(new RagConversationMessageDto(message.role(), message.content()));
+                // 升级前重建缓存曾用列表下标作为ID；旧缓存必须重建，不能用它推进摘要。
+                if (message.messageId() <= 0) {
+                    return null;
+                }
+                messages.add(new RagConversationMessageDto(message.messageId(), message.role(), message.content()));
             } catch (JsonProcessingException exception) {
                 delete(userId, chatId);
                 return null;
@@ -214,7 +268,7 @@ public class KnowledgeMemoryStore {
         for (int index = 0; index < history.size(); index++) {
             RagConversationMessageDto message = history.get(index);
             payloads.add(writeCachedMessage(new CachedMessage(
-                    (long) index, message.role(), message.content())));
+                    message.messageId(), message.role(), message.content())));
         }
         redisTemplate.executePipelined(new SessionCallback<>() {
             @Override
@@ -239,7 +293,7 @@ public class KnowledgeMemoryStore {
         Collections.reverse(newestFirst);
         return newestFirst.stream()
                 .map(message -> new RagConversationMessageDto(
-                        message.getRole(), message.getContent()))
+                        message.getMessageId(), message.getRole(), message.getContent()))
                 .toList();
     }
 
@@ -247,7 +301,7 @@ public class KnowledgeMemoryStore {
         try {
             redisTemplate.delete(List.of(
                     messagesKey(userId, chatId),
-                    versionKey(userId, chatId)));
+                    versionKey(userId, chatId), summaryKey(userId, chatId)));
         } catch (RuntimeException exception) {
             log.debug("event=knowledge_memory_delete_failed userId={} chatId={}", userId, chatId);
         }
@@ -255,7 +309,8 @@ public class KnowledgeMemoryStore {
 
     private boolean isCurrent(CacheSnapshot snapshot, Integer databaseVersion) {
         return snapshot != null && databaseVersion != null
-                && snapshot.version() == databaseVersion;
+                && snapshot.version() == databaseVersion
+                && snapshot.messages().size() == Math.min(MAX_MESSAGES, databaseVersion * 2L);
     }
 
     private String writeCachedMessage(KnowledgeMessageDto message) {
@@ -291,11 +346,11 @@ public class KnowledgeMemoryStore {
     }
 
     private String messagesKey(long userId, long chatId) {
-        return PREFIX + userId + ':' + chatId + ":messages";
+        return PREFIX + userId + ':' + chatId + ":messages:v2";
     }
 
     private String versionKey(long userId, long chatId) {
-        return PREFIX + userId + ':' + chatId + ":version";
+        return PREFIX + userId + ':' + chatId + ":version:v2";
     }
 
     private String missingKey(long userId, long chatId) {
@@ -304,6 +359,13 @@ public class KnowledgeMemoryStore {
 
     private String lockKey(long userId, long chatId) {
         return PREFIX + userId + ':' + chatId + ":lock";
+    }
+
+    private String summaryKey(long userId, long chatId) {
+        return PREFIX + userId + ':' + chatId + ":summary";
+    }
+
+    private record CachedSummary(long throughMessageId, JsonNode content) {
     }
 
     private record CachedMessage(long messageId, String role, String content) {

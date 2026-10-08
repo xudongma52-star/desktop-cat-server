@@ -230,7 +230,9 @@ public class CaptureItemServiceImpl implements CaptureItemService {
     private CaptureItemDto toDto(CaptureItemDO item) {
         String imageUrl = item.getImageStorageKey() == null ? null
                 : "/api/captures/%s/image".formatted(item.getCaptureId());
-        return new CaptureItemDto(item.getCaptureId(), item.getContent(), imageUrl, item.getCapturedAt(),
+        return new CaptureItemDto(item.getCaptureId(), item.getContent(), imageUrl,
+                item.getClassificationTarget(), item.getClassificationOrigin(), item.getRecordResolution(),
+                item.getCapturedAt(),
                 item.getVersion(), item.getCreatedAt(), item.getUpdatedAt());
     }
 

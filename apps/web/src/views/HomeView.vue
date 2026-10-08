@@ -4,7 +4,7 @@ import { getSystemStatus } from '../api/system'
 import type { SystemStatus } from '../api/system'
 import { ApiError, getCatProfile, updateCatName } from '../api/cat-profile'
 import type { CatProfile } from '../api/cat-profile'
-import ArticleRecallCarousel from '../components/ArticleRecallCarousel.vue'
+import ArticleHomeFeed from '../components/ArticleHomeFeed.vue'
 import PhotoCarousel from '../components/PhotoCarousel.vue'
 import WritingActivityHeatmap from '../components/WritingActivityHeatmap.vue'
 
@@ -97,7 +97,7 @@ onMounted(() => {
 
       <PhotoCarousel />
 
-      <ArticleRecallCarousel />
+      <ArticleHomeFeed />
 
       <section class="connection" aria-labelledby="connection-title">
         <div class="section-top">

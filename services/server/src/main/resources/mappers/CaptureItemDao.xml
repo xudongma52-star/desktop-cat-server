@@ -2,7 +2,8 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.desktopcat.server.capture.dao.CaptureItemDao">
   <sql id="columns">
-    capture_id::text AS capture_id, user_id, content, image_storage_key, captured_at,
+    capture_id::text AS capture_id, user_id, content, image_storage_key,
+    classification_target, classification_origin, record_resolution, captured_at,
     version, created_at, updated_at, deleted_at
   </sql>
   <sql id="activeFilter">
@@ -36,6 +37,62 @@
   <select id="countActive" resultType="long">
     SELECT COUNT(*) FROM capture_item WHERE <include refid="activeFilter"/>
   </select>
+
+  <select id="selectActiveDates" resultType="java.time.LocalDate">
+    SELECT DISTINCT CAST(captured_at AT TIME ZONE 'Asia/Shanghai' AS DATE) AS captured_date
+    FROM capture_item
+    WHERE user_id = #{userId} AND deleted_at IS NULL
+    ORDER BY captured_date DESC
+    OFFSET #{offset} LIMIT #{limit}
+  </select>
+
+  <select id="countActiveDates" resultType="long">
+    SELECT COUNT(DISTINCT CAST(captured_at AT TIME ZONE 'Asia/Shanghai' AS DATE))
+    FROM capture_item
+    WHERE user_id = #{userId} AND deleted_at IS NULL
+  </select>
+
+  <select id="selectActiveByTimeRange" resultType="com.desktopcat.server.capture.dao.CaptureItemDO">
+    SELECT <include refid="columns"/>
+    FROM capture_item
+    WHERE user_id = #{userId}
+      AND captured_at <![CDATA[>=]]> #{startTime}
+      AND captured_at <![CDATA[<]]> #{endTime}
+      AND deleted_at IS NULL
+    <if test="classificationTarget != null">
+      AND classification_target = #{classificationTarget}
+    </if>
+    <if test="unclassifiedOnly">
+      AND classification_target IS NULL
+    </if>
+    ORDER BY captured_at ASC, capture_id ASC
+  </select>
+
+  <update id="classifyIfUnclassified">
+    UPDATE capture_item
+    SET classification_target = #{classificationTarget},
+        classification_origin = #{classificationOrigin},
+        version = version + 1,
+        updated_at = CURRENT_TIMESTAMP
+    WHERE capture_id = CAST(#{captureId} AS UUID)
+      AND user_id = #{userId}
+      AND version = #{version}
+      AND classification_target IS NULL
+      AND deleted_at IS NULL
+  </update>
+
+  <update id="resolveRecord">
+    UPDATE capture_item
+    SET record_resolution = #{recordResolution},
+        version = version + 1,
+        updated_at = CURRENT_TIMESTAMP
+    WHERE capture_id = CAST(#{captureId} AS UUID)
+      AND user_id = #{userId}
+      AND version = #{version}
+      AND classification_target = 'RECORD'
+      AND record_resolution IS NULL
+      AND deleted_at IS NULL
+  </update>
 
   <update id="updateContent">
     UPDATE capture_item

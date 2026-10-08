@@ -17,6 +17,13 @@ public class PersonalRecordDO {
     private Integer version;
     private Instant createdAt;
     private Instant updatedAt;
+    private String coverImageKey;
+    private String homeExcerpt;
+
+    public String getCoverImageKey() { return coverImageKey; }
+    public void setCoverImageKey(String value) { coverImageKey = value; }
+    public String getHomeExcerpt() { return homeExcerpt; }
+    public void setHomeExcerpt(String value) { homeExcerpt = value; }
 
     public PersonalRecordDO() {
     }

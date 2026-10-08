@@ -5,9 +5,20 @@ import com.desktopcat.server.capture.dto.CaptureItemDto;
 import com.desktopcat.server.capture.dto.CaptureItemPageDto;
 import com.desktopcat.server.capture.dto.CaptureItemUpdateDto;
 import com.desktopcat.server.capture.dto.CaptureImageContentDto;
+import com.desktopcat.server.capture.dto.CaptureArticleCreateDto;
+import com.desktopcat.server.capture.dto.CaptureArticleDraftDto;
+import com.desktopcat.server.capture.dto.CaptureArticleDraftRequestDto;
+import com.desktopcat.server.capture.dto.CaptureClassifyDayDto;
+import com.desktopcat.server.capture.dto.CaptureClassificationResultDto;
+import com.desktopcat.server.capture.dto.CaptureDailyPageDto;
+import com.desktopcat.server.capture.dto.CaptureDirectRecordDto;
 import com.desktopcat.server.capture.service.CaptureItemService;
+import com.desktopcat.server.capture.service.CaptureOrganizationService;
 import com.desktopcat.server.identity.application.CurrentUserService;
+import com.desktopcat.server.record.dto.PersonalRecordDetailDto;
 import java.security.Principal;
+import java.time.LocalDate;
+import java.util.List;
 import org.springframework.context.annotation.Profile;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.CacheControl;
@@ -32,11 +43,15 @@ import org.springframework.web.multipart.MultipartFile;
 @RequestMapping("/api/captures")
 public class CaptureItemController {
     private final CaptureItemService captureItemService;
+    private final CaptureOrganizationService captureOrganizationService;
     private final CurrentUserService currentUserService;
 
     public CaptureItemController(
-            CaptureItemService captureItemService, CurrentUserService currentUserService) {
+            CaptureItemService captureItemService,
+            CaptureOrganizationService captureOrganizationService,
+            CurrentUserService currentUserService) {
         this.captureItemService = captureItemService;
+        this.captureOrganizationService = captureOrganizationService;
         this.currentUserService = currentUserService;
     }
 
@@ -62,6 +77,50 @@ public class CaptureItemController {
             @RequestParam(required = false) String q,
             Principal principal) {
         return captureItemService.list(userId(principal), page, pageSize, q);
+    }
+
+    @GetMapping("/daily")
+    public CaptureDailyPageDto listDaily(
+            @RequestParam(required = false) Integer page, Principal principal) {
+        return captureOrganizationService.listDaily(userId(principal), page);
+    }
+
+    @PostMapping("/classify-day")
+    public CaptureClassificationResultDto classifyDay(
+            @RequestBody(required = false) CaptureClassifyDayDto request, Principal principal) {
+        return captureOrganizationService.classifyDay(
+                userId(principal), request == null ? null : request.date());
+    }
+
+    @GetMapping("/emotions")
+    public List<CaptureItemDto> listEmotions(
+            @RequestParam(required = false) LocalDate date, Principal principal) {
+        return captureOrganizationService.listEmotions(userId(principal), date);
+    }
+
+    @PostMapping("/{captureId}/record")
+    @ResponseStatus(HttpStatus.CREATED)
+    public PersonalRecordDetailDto saveDirectRecord(
+            @PathVariable String captureId,
+            @RequestBody(required = false) CaptureDirectRecordDto request,
+            Principal principal) {
+        return captureOrganizationService.saveDirectRecord(
+                userId(principal), captureId, request);
+    }
+
+    @PostMapping("/article-draft")
+    public CaptureArticleDraftDto generateArticleDraft(
+            @RequestBody(required = false) CaptureArticleDraftRequestDto request,
+            Principal principal) {
+        return captureOrganizationService.generateArticleDraft(userId(principal), request);
+    }
+
+    @PostMapping("/article")
+    @ResponseStatus(HttpStatus.CREATED)
+    public PersonalRecordDetailDto saveArticle(
+            @RequestBody(required = false) CaptureArticleCreateDto request,
+            Principal principal) {
+        return captureOrganizationService.saveArticle(userId(principal), request);
     }
 
     @GetMapping("/{captureId}")

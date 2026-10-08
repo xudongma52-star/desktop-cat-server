@@ -15,5 +15,8 @@ public record PersonalRecordDetailDto(
         boolean ragEnabled,
         int version,
         Instant createdAt,
-        Instant updatedAt) {
+        Instant updatedAt,
+        String coverImageKey,
+        String homeExcerpt,
+        String imageUrl) {
 }

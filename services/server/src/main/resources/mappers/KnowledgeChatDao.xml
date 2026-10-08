@@ -2,7 +2,8 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.desktopcat.server.knowledge.dao.KnowledgeChatDao">
   <sql id="columns">
-    chat_id, user_id, title, version, created_at, updated_at, deleted_at
+    chat_id, user_id, title, version, created_at, updated_at, deleted_at,
+    memory_summary::text AS memory_summary, summary_through_message_id
   </sql>
 
   <insert id="insertChat" parameterType="com.desktopcat.server.knowledge.dao.KnowledgeChatDO"
@@ -51,7 +52,9 @@
   <update id="updateAfterMessage">
     UPDATE knowledge_chat
     SET version = version + 1,
-        updated_at = #{updatedAt}
+        updated_at = #{updatedAt},
+        memory_summary = CAST(#{memory.memorySummary} AS JSONB),
+        summary_through_message_id = #{memory.summaryThroughMessageId}
     WHERE chat_id = #{chatId}
       AND user_id = #{userId}
       AND version = #{version}

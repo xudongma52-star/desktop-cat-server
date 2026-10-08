@@ -47,7 +47,7 @@ services:
     build:
       context: ../services/rag-service
       dockerfile: ../../deploy/rag/Dockerfile
-    image: desktop-cat-rag:0.5.0
+    image: desktop-cat-rag:memory-20261008
     container_name: desktop-cat-rag
     restart: unless-stopped
     init: true
@@ -128,10 +128,9 @@ services:
     volumes:
       - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
       - /www/wwwroot/maxmeme.cn:/usr/share/nginx/html:ro
-      - /etc/letsencrypt:/etc/letsencrypt:ro
     ports:
-      - "80:80"
-      - "443:443"
+      # The existing host Nginx owns public 80/443 and forwards only maxmeme.cn here.
+      - "127.0.0.1:18080:80"
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/container-health >/dev/null"]
       interval: 10s

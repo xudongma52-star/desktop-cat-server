@@ -13,6 +13,9 @@ import com.desktopcat.server.record.dto.PersonalRecordRecallDto;
 import com.desktopcat.server.record.dto.PersonalRecordUpdateDto;
 import com.desktopcat.server.record.service.PersonalRecordService;
 import java.time.LocalDate;
+import com.desktopcat.server.record.service.RecordImageStorageService;
+import com.desktopcat.server.record.dto.PersonalRecordHomePageDto;
+import com.desktopcat.server.record.dto.PersonalRecordHomeItemDto;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Locale;
@@ -40,7 +43,7 @@ public class PersonalRecordServiceImpl implements PersonalRecordService {
     private static final Logger log = LoggerFactory.getLogger(PersonalRecordServiceImpl.class);
 
     // 业务规则统一放在常量中，避免创建、修改和查询使用不同的限制。
-    private static final Set<String> RECORD_TYPES = Set.of("DIARY", "THOUGHT", "WORK_NOTE");
+    private static final Set<String> RECORD_TYPES = Set.of("DIARY", "THOUGHT", "WORK_NOTE", "NOTE");
     private static final int MAX_TITLE_LENGTH = 120;
     private static final int MAX_CONTENT_LENGTH = 100_000;
     private static final int MAX_MOOD_LENGTH = 32;
@@ -50,10 +53,12 @@ public class PersonalRecordServiceImpl implements PersonalRecordService {
     private static final int MAX_ACTIVITY_RANGE_DAYS = 366;
 
     private final PersonalRecordDao personalRecordDao;
+    private final RecordImageStorageService imageStorage;
 
     // 使用构造器注入，使依赖关系明确，也方便在测试中传入替代实现。
-    public PersonalRecordServiceImpl(PersonalRecordDao personalRecordDao) {
+    public PersonalRecordServiceImpl(PersonalRecordDao personalRecordDao, RecordImageStorageService imageStorage) {
         this.personalRecordDao = personalRecordDao;
+        this.imageStorage = imageStorage;
     }
 
     /**
@@ -67,6 +72,7 @@ public class PersonalRecordServiceImpl implements PersonalRecordService {
         record.setRecordId(null);
         record.setUserId(userId);
         record.setVersion(0);
+        validateImage(userId, record);
 
         int insertedRows = personalRecordDao.insertRecord(record);
         // MyBatis 插入成功后会把数据库生成的 record_id 回填到 record。
@@ -174,6 +180,10 @@ public class PersonalRecordServiceImpl implements PersonalRecordService {
         PersonalRecordDO current = findActiveRecord(userId, normalizedRecordId);
         record.setRecordId(normalizedRecordId);
         record.setUserId(userId);
+        // 老客户端省略新字段时保留现有配图和摘要；传空字符串才明确移除。
+        if (request.coverImageKey() == null) record.setCoverImageKey(current.getCoverImageKey());
+        if (request.homeExcerpt() == null) record.setHomeExcerpt(current.getHomeExcerpt());
+        validateImage(userId, record);
 
         int updatedRows = personalRecordDao.updateRecord(record);
         if (updatedRows == 0) {
@@ -231,7 +241,7 @@ public class PersonalRecordServiceImpl implements PersonalRecordService {
     @Override
     public List<PersonalRecordRecallDto> listRecalls(long userId, Integer limit) {
         int normalizedLimit = validateRecallLimit(limit);
-        // 复用通用分页查询：不限制文章类型，只筛选 recall_enabled = true。
+        // 复用通用分页查询：不限制文章类型，筛选 recall_enabled = true 且已配图。
         return personalRecordDao.selectActivePage(
                         userId, null, true, 0, normalizedLimit).stream()
                 .map(record -> new PersonalRecordRecallDto(
@@ -242,6 +252,30 @@ public class PersonalRecordServiceImpl implements PersonalRecordService {
                         record.getMood(),
                         record.getRecordDate()))
                 .toList();
+    }
+
+    @Override
+    public PersonalRecordHomePageDto listHomeFeed(long userId, Integer page) {
+        int normalizedPage = validatePage(page);
+        long offset = (long) (normalizedPage - 1) * 10;
+        if (offset > Integer.MAX_VALUE) throw badRequest("Requested page is too large.");
+        // 沿用既有通用分页和计数；两者同步筛选已开启首页展示且有配图的文章。
+        long total = personalRecordDao.countActive(userId, null, true);
+        var items = personalRecordDao.selectActivePage(userId, null, true, (int) offset, 10).stream()
+                .map(record -> new PersonalRecordHomeItemDto(record.getRecordId(), record.getTitle(),
+                        record.getHomeExcerpt() == null ? createExcerpt(record.getContent()) : record.getHomeExcerpt(),
+                        RecordImageStorageService.imageUrl(record.getCoverImageKey()), record.getCreatedAt()))
+                .toList();
+        return new PersonalRecordHomePageDto(items, normalizedPage, offset + items.size() < total);
+    }
+
+    private void validateImage(long userId, PersonalRecordDO record) {
+        record.setCoverImageKey(normalizeOptionalText(record.getCoverImageKey()));
+        record.setHomeExcerpt(normalizeOptionalText(record.getHomeExcerpt()));
+        if (record.getCoverImageKey() != null) imageStorage.requireOwned(userId, record.getCoverImageKey());
+        if (Boolean.TRUE.equals(record.getRecallEnabled()) && record.getCoverImageKey() == null) {
+            throw badRequest("Home article requires an image.");
+        }
     }
 
     /**
@@ -292,10 +326,13 @@ public class PersonalRecordServiceImpl implements PersonalRecordService {
         if (request == null) {
             return null;
         }
-        return new PersonalRecordDO(
+        PersonalRecordDO record = new PersonalRecordDO(
                 null, null, request.recordType(), request.title(), request.content(),
                 request.recordDate(), request.mood(), request.recallEnabled(), request.ragEnabled(),
                 null, null, null);
+        record.setCoverImageKey(request.coverImageKey());
+        record.setHomeExcerpt(request.homeExcerpt());
+        return record;
     }
 
     /** 将修改 DTO 转换为 DAO 数据对象，并保留客户端提交的乐观锁版本。 */
@@ -303,10 +340,13 @@ public class PersonalRecordServiceImpl implements PersonalRecordService {
         if (request == null) {
             return null;
         }
-        return new PersonalRecordDO(
+        PersonalRecordDO record = new PersonalRecordDO(
                 null, null, request.recordType(), request.title(), request.content(),
                 request.recordDate(), request.mood(), request.recallEnabled(), request.ragEnabled(),
                 request.version(), null, null);
+        record.setCoverImageKey(request.coverImageKey());
+        record.setHomeExcerpt(request.homeExcerpt());
+        return record;
     }
 
     /** DAO 数据对象转换为创建、详情和修改接口共用的完整文章 DTO。 */
@@ -315,7 +355,8 @@ public class PersonalRecordServiceImpl implements PersonalRecordService {
                 record.getRecordId(), record.getRecordType(), record.getTitle(), record.getContent(),
                 record.getRecordDate(), record.getMood(),
                 Boolean.TRUE.equals(record.getRecallEnabled()), Boolean.TRUE.equals(record.getRagEnabled()),
-                record.getVersion(), record.getCreatedAt(), record.getUpdatedAt());
+                record.getVersion(), record.getCreatedAt(), record.getUpdatedAt(),
+                record.getCoverImageKey(), record.getHomeExcerpt(), RecordImageStorageService.imageUrl(record.getCoverImageKey()));
     }
 
     /** DAO 的分页摘要转换为含义明确的 Service 列表项。 */
@@ -342,7 +383,7 @@ public class PersonalRecordServiceImpl implements PersonalRecordService {
         }
         String normalizedRecordType = recordType.trim().toUpperCase(Locale.ROOT);
         if (!RECORD_TYPES.contains(normalizedRecordType)) {
-            throw badRequest("Record type must be DIARY, THOUGHT, or WORK_NOTE.");
+            throw badRequest("Record type must be DIARY, THOUGHT, WORK_NOTE, or NOTE.");
         }
         return normalizedRecordType;
     }

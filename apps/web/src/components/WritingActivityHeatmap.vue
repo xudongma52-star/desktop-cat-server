@@ -20,10 +20,12 @@ interface ActivityWeek {
   cells: ActivityCell[]
 }
 
-const DAYS_IN_ACTIVITY_RANGE = 365
 const WEEKDAY_LABELS = ['', '一', '', '三', '', '五', '']
 const today = startOfLocalDay(new Date())
-const rangeStart = addDays(today, -(DAYS_IN_ACTIVITY_RANGE - 1))
+// 按自然月取最近半年，月底日期夹到目标月末，避免 setMonth 将日期溢出到下一月。
+const halfYearAgo = new Date(today.getFullYear(), today.getMonth() - 6, 1)
+halfYearAgo.setDate(Math.min(today.getDate(), new Date(halfYearAgo.getFullYear(), halfYearAgo.getMonth() + 1, 0).getDate()))
+const rangeStart = addDays(halfYearAgo, 1)
 const rangeEnd = today
 const startDate = toDateString(rangeStart)
 const endDate = toDateString(rangeEnd)
@@ -67,9 +69,20 @@ const weeks = computed<ActivityWeek[]>(() => {
   return result
 })
 
+// 半年周格分为上下两段，日期从上段左侧读到下段右侧，适配正方形布局。
+const weekGroups = computed(() => {
+  const middle = Math.ceil(weeks.value.length / 2)
+  return [weeks.value.slice(0, middle), weeks.value.slice(middle)].map((group) => group.map((week, index) => ({
+    ...week,
+    monthLabel: index === 0 && !week.monthLabel
+      ? `${Number(week.cells.find((cell) => cell.inRange)!.date.slice(5, 7))}月`
+      : week.monthLabel,
+  })))
+})
+
 const selectedMessage = computed(() => {
   const selected = selectedDate.value
-  if (!selected) return '轻点任意一天，看看那天留下了多少篇日记。'
+  if (!selected) return ''
   const date = parseLocalDate(selected.date)
   return selected.count
     ? `${formatChineseDate(date)}写了 ${selected.count} 篇日记。`
@@ -134,40 +147,34 @@ onBeforeUnmount(() => {
 <template>
   <section class="writing-activity" aria-labelledby="writing-activity-title">
     <div class="activity-heading">
-      <div>
-        <p class="eyebrow">日常 · 记录</p>
+      <div class="activity-summary">
         <h2 id="writing-activity-title">写作足迹</h2>
-        <p class="activity-description">每一个亮起的格子，都是你认真记录过的一天。</p>
+        <span v-if="activity" class="activity-statistics" title="最近半年的日记篇数与写作天数" aria-live="polite">
+          {{ activity.totalRecords }} 篇 <span aria-hidden="true">·</span> {{ activity.activeDays }} 天
+        </span>
       </div>
-      <RouterLink class="button secondary" to="/records/new">写一篇日记</RouterLink>
+      <RouterLink class="activity-write" to="/records/new">写日记 <span aria-hidden="true">↗</span></RouterLink>
     </div>
 
-    <div class="activity-statistics" aria-live="polite">
-      <template v-if="activity">
-        <div><strong>{{ activity.totalRecords }}</strong><span>过去一年写下的日记</span></div>
-        <div><strong>{{ activity.activeDays }}</strong><span>留下记录的日子</span></div>
-      </template>
-      <p v-else-if="loading">正在整理过去一年的写作痕迹…</p>
-      <p v-else>热力图仍然为你保留着，写下第一篇就会亮起来。</p>
-    </div>
+    <p v-if="loading" class="activity-loading" role="status">加载中…</p>
 
     <p v-if="error" class="activity-error" role="alert">
       {{ error }}
       <button type="button" @click="loadActivity">重新加载</button>
     </p>
 
-    <div class="activity-scroll" tabindex="0" aria-label="过去一年的日记写作热力图，可横向滚动">
-      <div class="activity-chart" role="grid" aria-label="日记写作日期和篇数">
+    <div class="activity-scroll" tabindex="0" aria-label="最近半年的写作热力图，从上段到下段依次排列，可横向滚动">
+      <div v-for="(group, groupIndex) in weekGroups" :key="groupIndex" class="activity-chart" role="grid" :aria-label="`半年写作日期和篇数，第 ${groupIndex + 1} 段`" :style="{ '--activity-weeks': group.length }">
         <div class="month-row" aria-hidden="true">
           <span></span>
-          <span v-for="week in weeks" :key="week.key">{{ week.monthLabel }}</span>
+          <span v-for="week in group" :key="week.key">{{ week.monthLabel }}</span>
         </div>
         <div class="activity-grid">
           <div class="weekday-labels" aria-hidden="true">
             <span v-for="(label, index) in WEEKDAY_LABELS" :key="index">{{ label }}</span>
           </div>
           <div class="activity-weeks">
-            <div v-for="week in weeks" :key="week.key" class="activity-week" role="row">
+            <div v-for="week in group" :key="week.key" class="activity-week" role="row">
               <span
                 v-for="cell in week.cells"
                 :key="cell.date"
@@ -188,7 +195,7 @@ onBeforeUnmount(() => {
     </div>
 
     <div class="activity-footer">
-      <p>{{ selectedMessage }}</p>
+      <p aria-live="polite">{{ selectedMessage }}</p>
       <div class="activity-legend" aria-label="颜色越深，当天日记越多">
         <span>少</span>
         <i v-for="level in [0, 1, 2, 3, 4]" :key="level" :class="`level-${level}`"></i>
@@ -200,15 +207,17 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .writing-activity {
-  margin-bottom: 24px;
-  padding: 30px 32px 26px;
-  overflow: hidden;
-  border: 1px solid #dce2d6;
-  border-radius: 24px;
-  background: var(--paper);
-  box-shadow: 0 8px 26px rgba(40, 62, 55, .03);
+  width: min(320px, 100%);
+  aspect-ratio: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  margin-bottom: 72px;
+  padding: 8px 0;
+  background: transparent;
 }
 
+.activity-summary,
 .activity-heading,
 .activity-footer {
   display: flex;
@@ -217,41 +226,36 @@ onBeforeUnmount(() => {
   gap: 20px;
 }
 
-.activity-heading .eyebrow {
-  margin-bottom: 8px;
+.activity-summary {
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 5px;
 }
 
-.activity-description {
-  margin: 8px 0 0;
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 1.7;
-}
-
-.activity-statistics {
-  min-height: 58px;
-  display: flex;
-  align-items: center;
-  gap: 34px;
-  margin: 25px 0 18px;
-}
-
-.activity-statistics div {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-}
-
-.activity-statistics strong {
-  color: var(--green-dark);
-  font-family: Georgia, 'Microsoft YaHei', serif;
-  font-size: 31px;
+.activity-summary h2 {
+  margin: 0;
+  font-size: 18px;
   font-weight: 500;
 }
 
-.activity-statistics span,
-.activity-statistics p {
-  color: #7d877d;
+.activity-write {
+  padding: 8px 0 8px 12px;
+  color: var(--ink);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.activity-write:hover {
+  color: #2f6346;
+}
+
+.activity-heading {
+  margin-bottom: 10px;
+}
+
+.activity-statistics,
+.activity-loading {
+  color: #515b50;
   font-size: 11px;
 }
 
@@ -278,8 +282,8 @@ onBeforeUnmount(() => {
 
 .activity-scroll {
   overflow-x: auto;
-  padding: 3px 1px 11px;
-  scrollbar-color: #bdc7ba #eef0ea;
+  padding: 3px 1px;
+  scrollbar-color: #8d9b86 transparent;
   scrollbar-width: thin;
 }
 
@@ -291,17 +295,21 @@ onBeforeUnmount(() => {
 
 .activity-chart {
   width: max-content;
-  min-width: 100%;
+  margin-inline: auto;
+}
+
+.activity-chart + .activity-chart {
+  margin-top: 10px;
 }
 
 .month-row {
   display: grid;
-  grid-template-columns: 30px repeat(53, 14px);
-  gap: 4px;
-  margin-bottom: 7px;
-  color: #869087;
+  grid-template-columns: 24px repeat(var(--activity-weeks), 10px);
+  gap: 3px;
+  margin-bottom: 5px;
+  color: #515b50;
   font-size: 9px;
-  line-height: 14px;
+  line-height: 11px;
 }
 
 .month-row span:not(:first-child) {
@@ -311,31 +319,31 @@ onBeforeUnmount(() => {
 .activity-grid,
 .activity-weeks {
   display: flex;
-  gap: 4px;
+  gap: 3px;
 }
 
 .weekday-labels,
 .activity-week {
   display: grid;
-  grid-template-rows: repeat(7, 14px);
-  gap: 4px;
+  grid-template-rows: repeat(7, 10px);
+  gap: 3px;
 }
 
 .weekday-labels {
-  width: 30px;
-  flex: 0 0 30px;
-  color: #8b948b;
+  width: 24px;
+  flex: 0 0 24px;
+  color: #515b50;
   font-size: 9px;
-  line-height: 14px;
+  line-height: 11px;
 }
 
 .activity-cell,
 .activity-legend i {
-  width: 14px;
-  height: 14px;
-  border: 1px solid rgba(56, 85, 70, .06);
-  border-radius: 4px;
-  background: #ebede7;
+  width: 10px;
+  height: 10px;
+  border: 1px solid rgba(56, 85, 70, .14);
+  border-radius: 3px;
+  background: rgba(235, 237, 231, .28);
 }
 
 .activity-cell {
@@ -349,7 +357,7 @@ onBeforeUnmount(() => {
   position: relative;
   z-index: 1;
   transform: scale(1.24);
-  box-shadow: 0 0 0 2px var(--paper), 0 0 0 3px #65796b;
+  box-shadow: 0 0 0 1px #65796b;
   outline: none;
 }
 
@@ -359,7 +367,8 @@ onBeforeUnmount(() => {
 }
 
 .activity-cell.today {
-  box-shadow: 0 0 0 2px var(--paper), 0 0 0 3px #b38f50;
+  outline: 1px solid #b38f50;
+  outline-offset: 2px;
 }
 
 .activity-cell.level-1,
@@ -375,8 +384,9 @@ onBeforeUnmount(() => {
 .activity-legend i.level-4 { background: #2f6346; }
 
 .activity-footer {
-  margin-top: 13px;
-  color: #7e887e;
+  min-height: 16px;
+  margin-top: 7px;
+  color: #515b50;
   font-size: 10px;
 }
 
@@ -397,31 +407,23 @@ onBeforeUnmount(() => {
 
 @media (max-width: 700px) {
   .writing-activity {
-    padding: 24px 20px 22px;
+    margin-inline: auto;
+    margin-bottom: 48px;
   }
 
   .activity-heading {
     align-items: flex-start;
   }
 
-  .activity-heading .button {
-    padding-inline: 11px;
-  }
-
-  .activity-statistics {
-    gap: 20px;
-  }
-
-  .activity-statistics div {
+  .activity-summary {
     align-items: flex-start;
     flex-direction: column;
-    gap: 1px;
+    gap: 7px;
   }
 
   .activity-footer {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 10px;
+    flex-wrap: wrap;
+    gap: 8px;
   }
 }
 </style>

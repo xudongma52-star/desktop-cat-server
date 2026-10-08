@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.desktopcat.server.record.dao.PersonalRecordCaptureSourceDao">
+  <insert id="insert" parameterType="com.desktopcat.server.record.dao.PersonalRecordCaptureSourceDO">
+    INSERT INTO personal_record_capture_source (record_id, capture_id)
+    VALUES (#{recordId}, CAST(#{captureId} AS UUID))
+  </insert>
+
+  <select id="selectCaptureIdsByRecordId" resultType="string">
+    SELECT source.capture_id::text
+    FROM personal_record_capture_source source
+    JOIN capture_item capture ON capture.capture_id = source.capture_id
+    WHERE source.record_id = #{recordId}
+    ORDER BY capture.captured_at ASC, source.capture_id ASC
+  </select>
+</mapper>

@@ -1,6 +1,6 @@
 import { apiRequest } from './http'
 
-export type RecordType = 'DIARY' | 'THOUGHT' | 'WORK_NOTE'
+export type RecordType = 'DIARY' | 'THOUGHT' | 'WORK_NOTE' | 'NOTE'
 
 export interface PersonalRecord {
   recordId: number
@@ -14,6 +14,9 @@ export interface PersonalRecord {
   version: number
   createdAt: string
   updatedAt: string
+  coverImageKey?: string | null
+  homeExcerpt?: string | null
+  imageUrl?: string | null
 }
 
 export interface RecordPage {
@@ -69,6 +72,8 @@ export interface RecordInput {
   mood: string | null
   recallEnabled: boolean
   ragEnabled: boolean
+  coverImageKey?: string | null
+  homeExcerpt?: string | null
 }
 
 export interface UpdateRecordInput extends RecordInput {
@@ -120,6 +125,26 @@ export const recordTypeLabels: Record<RecordType, string> = {
   DIARY: '日记',
   THOUGHT: '心得',
   WORK_NOTE: '实习笔记',
+  NOTE: '笔记',
+}
+
+export interface HomeArticle {
+  recordId: number
+  title: string | null
+  excerpt: string
+  imageUrl: string
+  createdAt: string
+}
+
+export function getHomeArticles(page: number, signal?: AbortSignal): Promise<{ items: HomeArticle[]; page: number; hasMore: boolean }> {
+  return apiRequest(`/api/records/home-feed?page=${page}`, { signal })
+}
+
+export function uploadRecordImage(file: File, signal: AbortSignal): Promise<{ imageKey: string; imageUrl: string }> {
+  const body = new FormData()
+  body.append('file', file)
+  // 原图可能较大，不继承普通 JSON 请求的八秒超时；离开编辑页仍可取消。
+  return apiRequest('/api/records/images', { method: 'POST', body, signal })
 }
 
 export function formatRecordDate(value: string): string {

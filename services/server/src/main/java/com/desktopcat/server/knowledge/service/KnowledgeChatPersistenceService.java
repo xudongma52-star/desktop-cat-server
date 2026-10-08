@@ -76,7 +76,7 @@ public class KnowledgeChatPersistenceService {
             List<KnowledgeMatchDto> sources) {
         Instant now = Instant.now();
         int updated = chatDao.updateAfterMessage(
-                userId, chat.getChatId(), chat.getVersion(), now);
+                userId, chat.getChatId(), chat.getVersion(), now, chat);
         if (updated != 1) {
             throw new ResponseStatusException(
                     HttpStatus.CONFLICT,

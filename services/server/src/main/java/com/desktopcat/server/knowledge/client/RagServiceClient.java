@@ -2,6 +2,8 @@ package com.desktopcat.server.knowledge.client;
 
 import com.desktopcat.server.knowledge.dto.RagRetrieveRequestDto;
 import com.desktopcat.server.knowledge.dto.RagRetrieveResponseDto;
+import com.desktopcat.server.knowledge.dto.RagCompressRequestDto;
+import com.desktopcat.server.knowledge.dto.RagCompressResponseDto;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -53,6 +55,11 @@ public class RagServiceClient {
                     exception.getClass().getSimpleName());
             throw unavailable();
         }
+    }
+
+    public RagCompressResponseDto compress(RagCompressRequestDto request) {
+        return restClient.post().uri("/internal/rag/compress")
+                .body(request).retrieve().body(RagCompressResponseDto.class);
     }
 
     private ResponseStatusException unavailable() {

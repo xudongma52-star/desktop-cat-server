@@ -712,13 +712,13 @@ onMounted(() => {
   }
   function pointer(event:PointerEvent){
     if(hideMistForPageReview)return
-    if(props.reducedMotion || props.menu>.01 || props.scroll>.15 || props.content>.01){if(!mobile)leave();return}
+    if(props.reducedMotion || props.menu>.01 || props.content>.01){if(!mobile)leave();return}
     if(!mobile){
       const bounds=container.getBoundingClientRect()
       // 驻留只属于实际可见场景内的指针；移出或进入已有排除控件时沿原插值回浅。
       if(event.clientX<bounds.left || event.clientX>=bounds.right || event.clientY<bounds.top || event.clientY>=bounds.bottom){leave();return}
     }
-    if(event.target instanceof Element && event.target.closest('button,a,input,select,textarea')){if(!mobile)leave();return}
+    if(event.target instanceof Element && event.target.closest('button,a,input,select,textarea,[role="gridcell"],.activity-scroll')){if(!mobile)leave();return}
     inside=true;lastMove=performance.now()*.001
     targetPointer.set(event.clientX/window.innerWidth,1-event.clientY/window.innerHeight);requestDraw()
   }
@@ -784,7 +784,7 @@ onMounted(() => {
     const time=now*.001,dt=Math.min(.05,lastTime ? time-lastTime : 1/60);lastTime=time
     previousPointer.copy(easedPointer);easedPointer.lerp(targetPointer,1-Math.exp(-dt*10))
     // 页面状态可能在没有新pointer事件时改变，桌面驻留也必须随已有交互禁用条件结束。
-    if(!mobile&&(props.reducedMotion || props.menu>.01 || props.scroll>.15 || props.content>.01))inside=false
+    if(!mobile&&(props.reducedMotion || props.menu>.01 || props.content>.01))inside=false
     const idle=Math.max(0,time-lastMove),moving=inside&&idle<.10
     // 手机保留原衰减；桌面驻留持续写入，离场沿原强度插值回零。
     const desiredPressure=inside ? (mobile ? Math.max(0,1-idle/2.15) : 1) : 0
@@ -792,7 +792,7 @@ onMounted(() => {
     const desiredRadius=moving ? .17 : .035+.135*Math.max(0,1-idle/2.15)
     if(mobile)radius+=(Math.min(1,aspect)*desiredRadius-radius)*(1-Math.exp(-dt*5))
     else radius=.19
-    const enabled=!props.reducedMotion&&props.menu<.01&&props.scroll<.15
+    const enabled=!props.reducedMotion&&props.menu<.01&&props.content<.01
     updateAutomaticReveal(dt,!mobile&&!hideMistForPageReview&&ready&&enabled&&props.content<.01&&props.reveal>=.99)
     flowUniforms.pointer.value.copy(easedPointer);flowUniforms.velocity.value.subVectors(easedPointer,previousPointer)
     // 速度按内容区高度/秒计量，正常慢移也能写入运动场；停止后只平滑释放速度，不设置收缩时间线。
@@ -836,7 +836,8 @@ onMounted(() => {
     referenceBirds.forEach(bird=>bird.material.color.copy(stone.color))
     flowerTint.value.set(stone.color.r/paper.r,stone.color.g/paper.g,stone.color.b/paper.b)
     backdrop.copy(paper).lerp(nightBackground,menu)
-    container.style.opacity=String(1-Math.min(props.scroll,1)*.97*(1-menu))
+    // 首页下滑后仍以同一浮雕场景作为背景，内容区不再将场景淡出。
+    container.style.opacity='1'
     let assetsFading=false
     for(const job of jobs){
       if(!job.mesh?.visible||job.mesh.material.opacity===1)continue

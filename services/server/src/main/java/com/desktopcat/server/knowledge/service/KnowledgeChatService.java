@@ -46,6 +46,7 @@ public class KnowledgeChatService {
     private final KnowledgeChatPersistenceService persistenceService;
     private final KnowledgeMemoryStore memoryStore;
     private final ObjectMapper objectMapper;
+    private final KnowledgeCompressionService compressionService;
 
     public KnowledgeChatService(
             KnowledgeChatDao chatDao,
@@ -53,13 +54,15 @@ public class KnowledgeChatService {
             KnowledgeRetrievalService retrievalService,
             KnowledgeChatPersistenceService persistenceService,
             KnowledgeMemoryStore memoryStore,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            KnowledgeCompressionService compressionService) {
         this.chatDao = chatDao;
         this.messageDao = messageDao;
         this.retrievalService = retrievalService;
         this.persistenceService = persistenceService;
         this.memoryStore = memoryStore;
         this.objectMapper = objectMapper;
+        this.compressionService = compressionService;
     }
 
     public List<KnowledgeChatSummaryDto> listChats(long userId) {
@@ -142,11 +145,13 @@ public class KnowledgeChatService {
                 chat,
                 () -> messageDao.selectRecentByChat(
                         userId, chat.getChatId(), null, MESSAGE_PAGE_SIZE));
+        KnowledgeCompressionService.Context context = compressionService.prepare(userId, chat, history);
         KnowledgeSearchResultDto result = retrievalService.retrieve(
-                userId, new KnowledgeRetrieveRequestDto(question), history);
+                userId, new KnowledgeRetrieveRequestDto(question), context.history(), context.summary());
         KnowledgeChatResponseDto response = persistenceService.appendTurn(
                 userId, chat, question, answerFor(result), result.matches());
         updateMemory(userId, response);
+        memoryStore.cacheSummary(userId, chat);
         return response;
     }
 

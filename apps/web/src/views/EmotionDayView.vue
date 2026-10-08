@@ -4,12 +4,15 @@ import { useRoute, useRouter } from 'vue-router'
 import { describeApiError } from '../api/http'
 import { getEmotions, todayInLocalTime } from '../api/emotions'
 import type { Emotion } from '../api/emotions'
+import { getEmotionCaptures } from '../api/captures'
+import type { CaptureItem } from '../api/captures'
 
 const route = useRoute()
 const router = useRouter()
 const today = todayInLocalTime()
 const recordDate = ref(today)
 const emotions = ref<Emotion[]>([])
+const captureEmotions = ref<CaptureItem[]>([])
 const loading = ref(true)
 const error = ref('')
 let latestLoadId = 0
@@ -17,6 +20,20 @@ const isToday = computed(() => recordDate.value === today)
 const heading = computed(() => isToday.value ? '今天的内心' : '那天的内心')
 const listHeading = computed(() => isToday.value ? '今天和小猫说过的话' : '那天和小猫说过的话')
 const formattedDate = computed(() => formatDate(recordDate.value))
+const timeline = computed(() => [
+  ...emotions.value.map((item) => ({
+    key: `legacy-${item.emotionId}`,
+    content: item.content,
+    imageUrl: null as string | null,
+    createdAt: item.createdAt,
+  })),
+  ...captureEmotions.value.map((item) => ({
+    key: `capture-${item.captureId}`,
+    content: item.content,
+    imageUrl: item.imageUrl,
+    createdAt: item.capturedAt,
+  })),
+].sort((left, right) => left.createdAt.localeCompare(right.createdAt)))
 
 function isValidDate(value: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
@@ -60,8 +77,14 @@ async function loadEmotions(date = recordDate.value) {
   loading.value = true
   error.value = ''
   try {
-    const result = await getEmotions(date)
-    if (loadId === latestLoadId) emotions.value = result
+    const [legacyResult, captureResult] = await Promise.all([
+      getEmotions(date),
+      getEmotionCaptures(date),
+    ])
+    if (loadId === latestLoadId) {
+      emotions.value = legacyResult
+      captureEmotions.value = captureResult
+    }
   } catch (caught) {
     if (loadId === latestLoadId) {
       error.value = describeApiError(caught, '这一天的内容暂时没有加载成功，请稍后再试。')
@@ -136,7 +159,7 @@ watch(
     <section class="emotion-panel" aria-labelledby="emotion-list-title">
       <div class="emotion-panel-title">
         <h2 id="emotion-list-title">{{ listHeading }}</h2>
-        <span>{{ emotions.length }} 条</span>
+        <span>{{ timeline.length }} 条</span>
       </div>
 
       <div v-if="loading" class="state-panel" role="status">正在翻开这一天的心事…</div>
@@ -144,7 +167,7 @@ watch(
         <p>{{ error }}</p>
         <button type="button" class="button secondary" @click="loadEmotions()">重新加载</button>
       </div>
-      <div v-else-if="emotions.length === 0" class="state-panel emotion-empty">
+      <div v-else-if="timeline.length === 0" class="state-panel emotion-empty">
         <span class="empty-icon" aria-hidden="true">🐾</span>
         <div>
           <h3>{{ isToday ? '今天还没有说什么' : '这一天没有留下心情' }}</h3>
@@ -152,11 +175,18 @@ watch(
         </div>
       </div>
       <ol v-else class="emotion-timeline">
-        <li v-for="emotion in emotions" :key="emotion.emotionId">
+        <li v-for="emotion in timeline" :key="emotion.key">
           <time :datetime="emotion.createdAt">{{ formatTime(emotion.createdAt) }}</time>
-          <p>{{ emotion.content }}</p>
+          <p v-if="emotion.content">{{ emotion.content }}</p>
+          <a v-if="emotion.imageUrl" :href="emotion.imageUrl" target="_blank" rel="noopener">
+            <img :src="emotion.imageUrl" alt="心情来源图片" />
+          </a>
         </li>
       </ol>
     </section>
   </div>
 </template>
+
+<style scoped>
+.emotion-timeline img { max-width: 100%; max-height: 420px; object-fit: contain; border-radius: 10px; }
+</style>

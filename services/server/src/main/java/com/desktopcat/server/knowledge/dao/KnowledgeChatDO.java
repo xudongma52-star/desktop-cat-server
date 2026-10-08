@@ -11,6 +11,8 @@ public class KnowledgeChatDO {
     private Instant createdAt;
     private Instant updatedAt;
     private Instant deletedAt;
+    private String memorySummary;
+    private Long summaryThroughMessageId;
 
     public Long getChatId() { return chatId; }
     public void setChatId(Long chatId) { this.chatId = chatId; }
@@ -26,4 +28,10 @@ public class KnowledgeChatDO {
     public void setUpdatedAt(Instant updatedAt) { this.updatedAt = updatedAt; }
     public Instant getDeletedAt() { return deletedAt; }
     public void setDeletedAt(Instant deletedAt) { this.deletedAt = deletedAt; }
+    public String getMemorySummary() { return memorySummary; }
+    public void setMemorySummary(String memorySummary) { this.memorySummary = memorySummary; }
+    public Long getSummaryThroughMessageId() { return summaryThroughMessageId; }
+    public void setSummaryThroughMessageId(Long summaryThroughMessageId) {
+        this.summaryThroughMessageId = summaryThroughMessageId;
+    }
 }

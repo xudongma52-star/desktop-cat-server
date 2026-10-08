@@ -8,6 +8,9 @@ public class CaptureItemDO {
     private Long userId;
     private String content;
     private String imageStorageKey;
+    private String classificationTarget;
+    private String classificationOrigin;
+    private String recordResolution;
     private Instant capturedAt;
     private Integer version;
     private Instant createdAt;
@@ -22,6 +25,12 @@ public class CaptureItemDO {
     public void setContent(String content) { this.content = content; }
     public String getImageStorageKey() { return imageStorageKey; }
     public void setImageStorageKey(String imageStorageKey) { this.imageStorageKey = imageStorageKey; }
+    public String getClassificationTarget() { return classificationTarget; }
+    public void setClassificationTarget(String classificationTarget) { this.classificationTarget = classificationTarget; }
+    public String getClassificationOrigin() { return classificationOrigin; }
+    public void setClassificationOrigin(String classificationOrigin) { this.classificationOrigin = classificationOrigin; }
+    public String getRecordResolution() { return recordResolution; }
+    public void setRecordResolution(String recordResolution) { this.recordResolution = recordResolution; }
     public Instant getCapturedAt() { return capturedAt; }
     public void setCapturedAt(Instant capturedAt) { this.capturedAt = capturedAt; }
     public Integer getVersion() { return version; }

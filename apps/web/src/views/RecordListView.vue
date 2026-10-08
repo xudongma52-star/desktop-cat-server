@@ -125,7 +125,7 @@ onBeforeUnmount(() => {
             <p class="record-preview">{{ record.excerpt || record.content || '这篇记录暂时没有摘要。' }}</p>
             <div class="record-flags">
               <span v-if="record.mood">心情 · {{ record.mood }}</span>
-              <span v-if="record.recallEnabled">温馨回忆</span>
+              <span v-if="record.recallEnabled">首页图文</span>
               <span v-if="record.ragEnabled">允许智能检索</span>
             </div>
             <div class="record-card-actions">

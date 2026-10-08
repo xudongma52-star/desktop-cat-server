@@ -11,5 +11,7 @@ public record PersonalRecordUpdateDto(
         String mood,
         Boolean recallEnabled,
         Boolean ragEnabled,
-        Integer version) {
+        Integer version,
+        String coverImageKey,
+        String homeExcerpt) {
 }

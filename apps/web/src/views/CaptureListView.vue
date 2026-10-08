@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { RouterLink } from 'vue-router'
 import { createCapture, createCaptureWithImage, deleteCapture, getCaptures, updateCapture } from '../api/captures'
 import type { CaptureInput, CaptureItem } from '../api/captures'
 import { describeApiError } from '../api/http'
@@ -201,6 +202,7 @@ onBeforeUnmount(() => { if (imagePreviewUrl.value) URL.revokeObjectURL(imagePrev
       <p class="eyebrow">随手记录</p>
       <h1>想到什么，就记下什么。</h1>
       <p>不用起标题，也不用现在整理。小猫记下的文字也会出现在这里。</p>
+      <RouterLink class="organize-link" to="/captures/organize">按天分类和整理 →</RouterLink>
     </header>
 
     <form class="capture-form" @submit.prevent="saveDraft" @dragover.prevent @drop.prevent="handleDrop">
@@ -247,7 +249,8 @@ onBeforeUnmount(() => { if (imagePreviewUrl.value) URL.revokeObjectURL(imagePrev
 .page-heading { margin-bottom: 28px; }
 .eyebrow { color: #9b735b; letter-spacing: .12em; }
 h1 { margin: 8px 0; font-size: clamp(28px, 5vw, 42px); }
-.page-heading p:last-child { color: #75695f; }
+.page-heading > p:last-of-type { color: #75695f; }
+.organize-link { display: inline-flex; margin-top: 8px; color: #72594d; font-weight: 700; }
 .capture-form, .capture-card { padding: 22px; border: 1px solid #eadfd2; border-radius: 18px; background: #fffdf9; box-shadow: 0 8px 28px rgb(70 47 25 / 5%); }
 .capture-form { display: grid; gap: 12px; margin-bottom: 36px; }
 .capture-form label { font-weight: 700; }
