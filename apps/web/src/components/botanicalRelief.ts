@@ -1,14 +1,9 @@
 import * as THREE from 'three'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
-import { makeStudyPlant } from './botanicalStudyPlant'
 import { makeThinLeaf } from './botanicalUnifiedLeaves'
 import { makeMainUmbel } from './botanicalMainUmbel'
 import { makeSecondaryUmbel } from './botanicalSecondaryUmbel'
 import { makeRightBroadLeaf } from './botanicalRightBroadLeaves'
-import { makeLowHeartLeaves } from './botanicalLowHeartLeaves'
-import { makeCentralFlowerSprig } from './botanicalCentralFlowerSprig'
-import { makeTrifoliateUnit } from './botanicalTrifoliate'
-import { makePalmLeaf } from './botanicalPalmLeaf'
 
 /** 自制草木曲面：叶缘、叶脉和花梗都是几何；没有采样付费模型或参考站资产。 */
 export function makeBotanicalRelief(mobile: boolean) {
@@ -157,21 +152,6 @@ export function makeBotanicalRelief(mobile: boolean) {
       const floret=new THREE.SphereGeometry(.019+(i%2)*.004,5,3)
       floret.scale(1,.8,.55);floret.translate(tip.x,tip.y,tip.z);parts.push(floret)
     }
-  }
-  function openUmbel(rootX: number, crownX: number, crownY: number, spread: number, phase: number, rays: number) {
-    const start=parts.length
-    const root=point(rootX,-4.55,.05),crown=point(crownX,crownY,.105)
-    twig([root,point(rootX+.10,-2.25,.085),point(crownX+.35,crownY-1.3,.11),crown],.010,56)
-    // 扇形张开而非俯视圆盘：主花梗约一屏百余像素长，缩小全景仍能辨认分组轮廓。
-    for (let i=0;i<rays;i++) {
-      const angle=-1.19+i/(rays-1)*2.27
-      const extent=spread*(.94+.07*Math.sin(i*1.6+phase))
-      const tip=crown.clone().add(point(Math.sin(angle)*extent,Math.cos(angle)*extent*.97,.018+Math.sin(i*.8)*.035))
-      const bow=crown.clone().lerp(tip,.55).add(point(Math.sin(angle)*.045,.02,.015))
-      twig([crown,bow,tip],.008,16)
-      flowerCluster(tip,spread*.075,phase+i*.7)
-    }
-    shallowAccent(start)
   }
   function splitLeaf(base: THREE.Vector3, length: number, width: number, angle: number, phase: number) {
     // 两侧裂片各有独立结构；宽裂叶不再用蕨叶等间距的羽片或周期锯齿拼成。
@@ -328,30 +308,22 @@ export function makeBotanicalRelief(mobile: boolean) {
     for(const geometry of parts.slice(fernStart))geometry.scale(1,1,.32)
   } else {
     // 上中偏左的银杏三叶与整条弯茎改由独立参考投影网格承载；其他植物布局与显露场保持。
-    // 仅在底中植物带补一组低矮心形阔叶，保留上方中央留白及其他已验收植物。
-    parts.push(makeLowHeartLeaves())
-    // 第一轮结构修订：宽裂叶、疏花梗和斜向分枝为主体；两株蕨叶以不同尺度和斜向姿态退到底部配角。
-    // 左高株主管体保留原截面与侧枝；相邻阔叶主轴采用14°尺度的缓弓，叶柄随切线和接点高度连接。
-    branchedSprig(-6.25,7.40,1.22,1,[-.20,.20],1.33);broad(-6.50,4.65,.70,2,14)
-    parts.push(makeSecondaryUmbel().scale(1,1,.70));openUmbel(-4.4,-3.82,-1.1,.48,3,8)
-    // 第二轮左侧单株试件已冻结保留；第三轮只统一其余桌面真叶，构图与手机分支不变。
-    // 左细草采用约9°尺度的另一条缓弓；根和穗顶保持，三片长叶随新曲线转向并连续接入主轴。
-    parts.push(makeStudyPlant());grasses(-6.45,6.45,.08,[[.32,-.33],[.67,-.29]],true)
-    fern(-6.80,2.55,.48,1,{scale:[.78,.76],angle:.15,offset:[.12,-.08]});branchedSprig(-5.1,4.75,3.25,3)
-    // 中下部阔叶株沿用连续叶柄与切线跟随，采用11°尺度的缓弓；第5叶原有10°姿态调整仍绕真实接点保留。
-    branchedSprig(-1.65,3.70,1.3,4);broad(-.15,1.65,.78,5,11)
-    // 第四轮右上主花已阶段接受并保留；第五轮只协调左侧次花与下部枝叶层级。
-    parts.push(makeMainUmbel().scale(1,1,.70))
-    branchedSprig(3.15,5.55,1.45,6);branchedSprig(5.10,4.85,-3.6,7)
+    // 底中旧心形叶已按确认图整组替换为独立四叶浅裂弯枝，避免与新网格叠加。
+    // 左半边旧高枝、草穗、大小伞形花、单株试件和交叠蕨叶全部移除，改由确认图单株弯枝承载。
+    // 旧左阔叶7片各消费3次随机数，蕨叶16对各消费4次；保留推进，右侧既有叶形参数不变。
+    for(let i=0;i<7*3+16*4;i++)random()
+    // 中下部旧细叶枝与短阔叶株随本轮区域重做移除，旧11°弯茎及第5叶姿态由确认图的连续茎柄取代。
+    // 旧 broad 的7片叶各消费3次随机数；保留序列推进，避免移除它后改变右侧已确认植株的叶形参数。
+    for(let i=0;i<7*3;i++)random()
+    // 右上旧伞形花及斜穿它的旧碎叶枝整体由确认图独立网格取代，手机伞形花实例保持。
+    // 仅保留右外侧枝条；不移动已确认的花朵和四叶裂叶。
+    branchedSprig(3.15,5.55,1.45,6)
     dividedPlant(4.45,3.30,1.20,5);broad(6.55,3.8,-.13,6)
-    // 最右侧高草保留两处不等幅转向，右内侧用单次偏弯；左侧细草使用自身较缓的弓形，不镜像右侧。
-    grasses(6.70,7.55,-.26,[[.40,-.53],[.73,.07]]);grasses(5.10,6.1,-.55,[[.58,.42]]);fern(1.20,1.75,-.65,8,{scale:[.72,.80],angle:.23,offset:[.25,-.10]})
-    // 中央空白补一组主花、侧花和合拢花苞，不迁移两侧已验收植物。
-    parts.push(makeCentralFlowerSprig(false))
-    // 中偏左仅补一枚同节点三出复叶，原植物及手机构图保持。
-    parts.push(makeTrifoliateUnit())
-    // 原右侧长杆左方仅补一片连续浅裂掌状叶，旧植物与三出复叶保持。
-    parts.push(makePalmLeaf())
+    // 最右侧高草保留两处不等幅转向，右内侧用单次偏弯；本轮左侧细草已整体移除。
+    grasses(6.70,7.55,-.26,[[.40,-.53],[.73,.07]]);grasses(5.10,6.1,-.55,[[.58,.42]])
+    // 主副花、连续茎秆、合拢花苞及附着细叶由独立网格承载，共用抬升与阴影，右侧植株不迁移。
+    // 中偏左原三出复叶及旧主杆已整体由独立参考描边四叶弯枝替代，不叠加旧网格。
+    // 底中旧掌状叶及交叠蕨叶已由确认图的四片独立裂叶和弯曲主茎取代；右侧植株保持。
   }
   const geometry=mergeGeometries(parts,false)!
   parts.forEach(part=>part.dispose())

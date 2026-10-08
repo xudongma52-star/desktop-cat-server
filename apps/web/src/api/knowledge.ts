@@ -89,7 +89,8 @@ export async function sendKnowledgeChat(
   question: string,
 ): Promise<KnowledgeChatResponse> {
   const timeoutController = new AbortController()
-  const timeoutId = window.setTimeout(() => timeoutController.abort(), 130_000)
+  // 同步压缩通常增加一次模型调用；较旧对话首次恢复可能需要分批补齐摘要。
+  const timeoutId = window.setTimeout(() => timeoutController.abort(), 190_000)
 
   try {
     return apiRequest<KnowledgeChatResponse>('/api/knowledge/chat', {

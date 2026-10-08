@@ -208,11 +208,13 @@ body:has(.corner-app) { min-width: 0; background: #e9e6de; }
 .corner-loading-quote { position: absolute; left: calc(100vw / 3 + 10.667px); top: 50%; transform: translateY(calc(-50% - 2.8px)); width: calc(100vw * 5 / 12 - 22.667px); margin: 0; font-family: 'Corner Opening Serif', 'Songti SC', 'SimSun', serif; font-size: clamp(14px, calc((100vw * 5 / 12 - 30px) / 27), 28px); font-weight: 400; font-synthesis: none; line-height: 1.2; letter-spacing: 0; white-space: nowrap; }
 .corner-loading-character { display: inline-block; opacity: 0; will-change: opacity; }
 .corner-loading-progress { position: absolute; left: calc(75vw + 4px); top: 50%; transform: translateY(-50%); font-family: Arial, sans-serif; font-size: 14px; font-weight: 400; line-height: 1.1; font-variant-numeric: tabular-nums; opacity: 0; }
+/* 首页阅读层沿用开屏锚点与字号，以深色承接灰白墙面；不拦截浮雕鼠标交互。 */
+.corner-home-copy { position: fixed; z-index: 2; color: #2b2e28; pointer-events: none; }
+.corner-home-copy .corner-loading-identity { opacity: 1; visibility: visible; clip-path: none; }
+.corner-home-copy .corner-loading-symbol .corner-brand-mark { filter: none; }
 /* 为现有透明度与裁切动画预留合成层，保持开屏文案、字形排版和时间轴不变。 */
 .corner-loading-identity, .corner-loading-progress { will-change: opacity, clip-path; }
 .corner-loading-note { position: absolute; left: calc(100vw / 3 + 10.667px); top: calc(50% + 58px); max-width: 50vw; color: #aaa; font-size: 11px; line-height: 1.7; }
-.corner-opening-skip { position: fixed; z-index: 8; bottom: 26px; right: clamp(24px, 6vw, 108px); display: flex; align-items: center; gap: 18px; min-height: 44px; border-radius: 0; background: transparent; color: #999; padding: 0 4px; font-size: 11px; }
-.corner-opening-skip:hover { background: transparent; color: #fff; }
 /* 黑场保持参考的安静构图；原菜单仍可由指针或键盘中断，不增加声音提示或权限。 */
 .corner-opening-wait .corner-header { z-index: 7; visibility: hidden; }
 .corner-opening-wait .corner-menu-toggle { visibility: visible; opacity: 0; color: #fff; }
@@ -220,7 +222,7 @@ body:has(.corner-app) { min-width: 0; background: #e9e6de; }
 .corner-scene-note { position: absolute; z-index: 2; top: 122px; left: clamp(24px, 6vw, 108px); max-width: calc(100% - 48px); margin: 0; color: #76796e; font-size: 11px; line-height: 1.7; pointer-events: none; }
 /* 加载阶段的首页已挂载，但入场由品牌停顿与场景首帧共同触发，避免文字提前消耗动画。 */
 .corner-opening-wait .corner-intro-copy, .corner-opening-wait .corner-companion-caption, .corner-opening-wait .corner-intro-footer, .corner-opening-wait .site-footer { opacity: 0; visibility: hidden; }
-/* 右下入口在跳过按钮撤掉后才交接；中断开场则立即恢复，不遗留隐藏的入口。 */
+/* 右下入口在开屏退去后才交接；中断开场则立即恢复，不遗留隐藏的入口。 */
 .corner-intro-footer { transition: opacity .24s ease; }
 .corner-opening-active .corner-intro-footer { opacity: 0; visibility: hidden; }
 .corner-opening-skipped .corner-intro-footer { transition: none; }
@@ -234,7 +236,6 @@ body:has(.corner-app) { min-width: 0; background: #e9e6de; }
   .corner-loading-quote { left: 24px; width: calc(100vw - 84px); font-size: 18px; line-height: 1.7; white-space: normal; overflow-wrap: anywhere; transform: translateY(-50%); }
   .corner-loading-progress { left: auto; right: 24px; }
   .corner-loading-note { left: 24px; top: calc(50% + 80px); max-width: calc(100vw - 48px); }
-  .corner-opening-skip { bottom: 16px; }
   .corner-scene-note { top: 98px; left: 24px; font-size: 10px; }
 }
 @media (max-width: 380px) { .corner-intro h1 { font-size: 34px; } }

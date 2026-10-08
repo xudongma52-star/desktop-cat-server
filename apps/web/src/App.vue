@@ -29,8 +29,9 @@ const reducedMotion = ref(window.matchMedia('(prefers-reduced-motion: reduce)').
 const sceneState = reactive({ menu: 0, content: homeLayout.value ? 0 : 1, scroll: 0, hover: 0, reveal: 0, openingTone: 2 })
 const CornerScene = defineAsyncComponent(() => import('./components/CornerScene.vue'))
 const BotanicalScene = defineAsyncComponent(() => import('./components/BotanicalScene.vue'))
-const loadingProgress = ref(0)
+const displayedProgress = reactive({ value: 0 })
 const sceneReady = ref(false)
+const sceneRequested = ref(false)
 const sceneFailed = ref(false)
 const skipOpening = ref(false)
 const openingPhase = ref<'pending' | 'loading' | 'revealing' | 'complete'>('pending')
@@ -40,7 +41,25 @@ let openingContext: gsap.Context | undefined
 let openingStarted = false
 let brandReady = false
 let preludeDone = false
-// 网页氛围与三维墙面共用色彩阶段；黑色品牌层退去后接上原墙面，资源进度独立推进。
+let progressStarted = false
+let progressTween: gsap.core.Tween | undefined
+const loadingPercent = computed(() => Math.min(sceneReady.value ? 100 : 99, Math.round(displayedProgress.value)))
+// 文字完整显露后才开始开屏计数；场景首帧未就绪时停在 99，快缓存也不会直接亮出 100。
+function updateDisplayedProgress() {
+  if (!progressStarted || openingPhase.value !== 'loading' || !openingContext) return
+  const target = sceneReady.value ? 100 : 99
+  openingContext.add(() => {
+    progressTween?.kill()
+    progressTween = gsap.to(displayedProgress, {
+      value: Math.max(displayedProgress.value, target),
+      duration: Math.max(.45, (target - displayedProgress.value) / 55),
+      ease: 'power1.out',
+      onComplete: () => { void revealOpening() },
+    })
+  })
+}
+watch(sceneReady, updateDisplayedProgress)
+// 网页氛围与三维墙面共用色彩阶段；黑色品牌层退去后接上原墙面，开屏计数独立推进。
 const openingPaper = computed(() => {
   const tone = sceneState.openingTone
   return tone < 1 ? gsap.utils.interpolate('#c0cbbc', '#f1e4ce', tone) : gsap.utils.interpolate('#f1e4ce', '#e9e7e1', tone - 1)
@@ -54,6 +73,7 @@ function endOpening() {
   // 用户已进入、打开菜单或换页后，晚到资源只补画面，不重新播放或抢焦点。
   openingContext?.revert()
   openingContext = undefined
+  progressTween = undefined
   skipOpening.value = true
   sceneState.reveal = 1
   sceneState.openingTone = 2
@@ -89,19 +109,23 @@ async function startOpening() {
   if (!copy) { endOpening(); return }
   openingContext = gsap.context(() => {
     // 参考共享开屏：黑场、横向品牌显露、由左至右错峰渐亮、完整阅读停顿。
-    // 同会话刷新也保留这一品牌节奏；慢资源留在自然停顿，不循环、不伪造进度。
+    // 同会话刷新也保留这一品牌节奏；慢资源留在自然停顿，准备好首帧才完成计数与揭幕。
+    // 黑场等待保留原来的四分之一；渐显时长加倍，文字完整显露后才计数与初始化三维场景，避免卡住半个 Logo。
+    const logoDelay = .525
+    const copyComplete = logoDelay + .15 + 2
     gsap.timeline({ onComplete: () => { preludeDone = true; void revealOpening() } })
       .fromTo(copy.querySelector('.corner-loading-identity'),
         { autoAlpha: 0, clipPath: 'inset(0 100% 0 0)' },
-        { autoAlpha: 1, clipPath: 'inset(0 0% 0 0)', duration: 1.1, ease: 'none' }, 2.1)
-      .to(copy.querySelectorAll('.corner-loading-character'), { opacity: 1, duration: 1.3, stagger: { amount: .35 }, ease: 'sine.inOut' }, 2.65)
-      .to(copy.querySelector('.corner-loading-progress'), { opacity: .5, duration: .6, ease: 'sine.inOut' }, 2.65)
-      .to({}, { duration: 1.05 }, 4.3)
+        { autoAlpha: 1, clipPath: 'inset(0 0% 0 0)', duration: 1.3, ease: 'none' }, logoDelay)
+      .to(copy.querySelectorAll('.corner-loading-character'), { opacity: 1, duration: 1.6, stagger: { amount: .4 }, ease: 'sine.inOut' }, logoDelay + .15)
+      .to(copy.querySelector('.corner-loading-progress'), { opacity: .5, duration: .35, ease: 'sine.inOut', onStart: () => { progressStarted = true; updateDisplayedProgress() } }, copyComplete)
+      .call(() => { sceneRequested.value = true }, [], copyComplete + .1)
+      .to({}, { duration: .4 }, copyComplete + .1)
   }, shell.value!)
 }
 
 async function revealOpening() {
-  if (!preludeDone || !sceneReady.value || openingPhase.value !== 'loading') return
+  if (!preludeDone || !sceneReady.value || displayedProgress.value < 99.99 || openingPhase.value !== 'loading') return
   if (!homeLayout.value || menuOpen.value || reducedMotion.value) { endOpening(); return }
   openingPhase.value = 'revealing'
   await nextTick()
@@ -362,7 +386,7 @@ async function logout() {
 <template>
   <div ref="shell" class="app-shell" :class="{ 'auth-mode': authLayout, 'corner-app': !authLayout, 'corner-home': homeLayout, 'corner-night': menuOpen, 'corner-opening-wait': openingPhase === 'loading', 'corner-opening-active': openingPhase === 'loading' || openingPhase === 'revealing', 'corner-opening-skipped': skipOpening }" :style="{ '--corner-night': sceneState.menu, '--corner-opening-paper': openingPaper }" :data-scene-content="sceneState.content" :data-opening-tone="sceneState.openingTone" :data-opening-phase="openingPhase">
     <div v-if="!authLayout" class="corner-atmosphere" aria-hidden="true"></div>
-    <component :is="homeLayout ? BotanicalScene : CornerScene" :key="homeLayout ? (botanicalMobile ? 'botanical-mobile' : 'botanical-desktop') : 'corner-scene'" v-if="!authLayout" :menu="sceneState.menu" :content="sceneState.content" :scroll="sceneState.scroll" :hover="sceneState.hover" :reveal="sceneState.reveal" :opening-tone="sceneState.openingTone" :opening-color="openingPaper" :reduced-motion="reducedMotion" :skip-opening="skipOpening" @progress="loadingProgress = $event" @failure="sceneFailed = true" @ready="finishOpening" />
+    <component :is="homeLayout ? BotanicalScene : CornerScene" :key="homeLayout ? (botanicalMobile ? 'botanical-mobile' : 'botanical-desktop') : 'corner-scene'" v-if="!authLayout && (!homeLayout || sceneRequested || openingPhase === 'complete')" :menu="sceneState.menu" :content="sceneState.content" :scroll="sceneState.scroll" :hover="sceneState.hover" :reveal="sceneState.reveal" :opening-tone="sceneState.openingTone" :opening-color="openingPaper" :reduced-motion="reducedMotion" :skip-opening="skipOpening" @failure="sceneFailed = true" @ready="finishOpening" />
     <div v-if="!authLayout && (openingPhase === 'loading' || openingPhase === 'revealing')" class="corner-loading" :aria-hidden="openingPhase === 'revealing'">
       <div class="corner-loading-copy">
         <div class="corner-loading-identity" aria-label="max">
@@ -370,11 +394,18 @@ async function logout() {
           <span class="corner-loading-brand">max</span>
         </div>
         <p class="corner-loading-quote" :aria-label="openingQuote"><span v-for="(character, index) in openingCharacters" :key="index" class="corner-loading-character" aria-hidden="true">{{ character }}</span></p>
-        <span class="corner-loading-progress" role="progressbar" aria-label="场景准备进度" :aria-valuenow="Math.round(loadingProgress * 100)" aria-valuemin="0" aria-valuemax="100" :aria-valuetext="sceneFailed ? '部分素材未就绪，将使用简化画面' : '正在准备场景'">{{ Math.round(loadingProgress * 100) }}</span>
+        <span class="corner-loading-progress" role="progressbar" aria-label="场景准备进度" :aria-valuenow="loadingPercent" aria-valuemin="0" aria-valuemax="100" :aria-valuetext="sceneFailed ? '部分素材未就绪，将使用简化画面' : '正在准备场景'">{{ loadingPercent }}</span>
         <span v-if="sceneFailed" class="corner-loading-note" role="status">部分素材未就绪，将使用简化画面</span>
       </div>
     </div>
-    <button v-if="!authLayout && (openingPhase === 'loading' || openingPhase === 'revealing')" class="corner-opening-skip" type="button" @click="endOpening">直接进入 <span aria-hidden="true">↗</span></button>
+    <!-- 开屏结束后保留同位置的品牌与文案；只承接阅读内容，进度仅属于加载阶段。 -->
+    <div v-if="homeLayout && (openingPhase === 'revealing' || openingPhase === 'complete')" class="corner-loading-copy corner-home-copy" :style="{ opacity: sceneState.reveal * (1 - sceneState.scroll) * (1 - sceneState.menu) }" :aria-hidden="menuOpen || sceneState.scroll === 1">
+      <div class="corner-loading-identity" aria-label="max">
+        <div class="corner-loading-symbol"><BrandMark /></div>
+        <span class="corner-loading-brand">max</span>
+      </div>
+      <p class="corner-loading-quote">{{ openingQuote }}</p>
+    </div>
     <p v-if="homeLayout && sceneReady && sceneFailed && openingPhase === 'complete' && !menuOpen" class="corner-scene-note" role="status">画面已简化，记录照常可用。</p>
     <svg v-if="!authLayout" class="corner-surface" aria-hidden="true" focusable="false" width="100%" height="100%">
       <defs>
