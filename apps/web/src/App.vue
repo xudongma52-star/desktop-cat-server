@@ -28,9 +28,18 @@ const headerScrolled = ref(false)
 const reducedMotion = ref(window.matchMedia('(prefers-reduced-motion: reduce)').matches)
 const sceneState = reactive({ menu: 0, content: homeLayout.value ? 0 : 1, scroll: 0, hover: 0, reveal: 0, openingTone: 2 })
 const CornerScene = defineAsyncComponent(() => import('./components/CornerScene.vue'))
-const BotanicalScene = defineAsyncComponent(() => import('./components/BotanicalScene.vue'))
+const BotanicalScene = defineAsyncComponent({
+  loader: () => import('./components/BotanicalScene.vue'),
+  onError(error, _retry, fail) {
+    // 脚本失败沿用现有简化提示并结束开屏，不能留在没有进度来源的等待状态。
+    console.warn('Botanical scene module failed', error)
+    void finishOpening({ failed: true })
+    fail()
+  },
+})
 const displayedProgress = reactive({ value: 0 })
 const sceneReady = ref(false)
+const sceneProgress = ref(0)
 const sceneRequested = ref(false)
 const sceneFailed = ref(false)
 const skipOpening = ref(false)
@@ -44,21 +53,21 @@ let preludeDone = false
 let progressStarted = false
 let progressTween: gsap.core.Tween | undefined
 const loadingPercent = computed(() => Math.min(sceneReady.value ? 100 : 99, Math.round(displayedProgress.value)))
-// 文字完整显露后才开始开屏计数；场景首帧未就绪时停在 99，快缓存也不会直接亮出 100。
+// 文字完整显露后才开始开屏计数；跟随首屏实际下载进度，首帧提交后才到 100，快缓存也保留计数过渡。
 function updateDisplayedProgress() {
   if (!progressStarted || openingPhase.value !== 'loading' || !openingContext) return
-  const target = sceneReady.value ? 100 : 99
+  const target = sceneReady.value ? 100 : Math.min(99, sceneProgress.value * 100)
   openingContext.add(() => {
     progressTween?.kill()
     progressTween = gsap.to(displayedProgress, {
       value: Math.max(displayedProgress.value, target),
-      duration: Math.max(.45, (target - displayedProgress.value) / 55),
+      duration: Math.max(.2, (target - displayedProgress.value) / 55),
       ease: 'power1.out',
       onComplete: () => { void revealOpening() },
     })
   })
 }
-watch(sceneReady, updateDisplayedProgress)
+watch([sceneReady, sceneProgress], updateDisplayedProgress)
 // 网页氛围与三维墙面共用色彩阶段；黑色品牌层退去后接上原墙面，开屏计数独立推进。
 const openingPaper = computed(() => {
   const tone = sceneState.openingTone
@@ -386,7 +395,7 @@ async function logout() {
 <template>
   <div ref="shell" class="app-shell" :class="{ 'auth-mode': authLayout, 'corner-app': !authLayout, 'corner-home': homeLayout, 'corner-night': menuOpen, 'corner-opening-wait': openingPhase === 'loading', 'corner-opening-active': openingPhase === 'loading' || openingPhase === 'revealing', 'corner-opening-skipped': skipOpening }" :style="{ '--corner-night': sceneState.menu, '--corner-opening-paper': openingPaper }" :data-scene-content="sceneState.content" :data-opening-tone="sceneState.openingTone" :data-opening-phase="openingPhase">
     <div v-if="!authLayout" class="corner-atmosphere" aria-hidden="true"></div>
-    <component :is="homeLayout ? BotanicalScene : CornerScene" :key="homeLayout ? (botanicalMobile ? 'botanical-mobile' : 'botanical-desktop') : 'corner-scene'" v-if="!authLayout && (!homeLayout || sceneRequested || openingPhase === 'complete')" :menu="sceneState.menu" :content="sceneState.content" :scroll="sceneState.scroll" :hover="sceneState.hover" :reveal="sceneState.reveal" :opening-tone="sceneState.openingTone" :opening-color="openingPaper" :reduced-motion="reducedMotion" :skip-opening="skipOpening" @failure="sceneFailed = true" @ready="finishOpening" />
+    <component :is="homeLayout ? BotanicalScene : CornerScene" :key="homeLayout ? (botanicalMobile ? 'botanical-mobile' : 'botanical-desktop') : 'corner-scene'" v-if="!authLayout && (!homeLayout || sceneRequested || openingPhase === 'complete')" :menu="sceneState.menu" :content="sceneState.content" :scroll="sceneState.scroll" :hover="sceneState.hover" :reveal="sceneState.reveal" :opening-tone="sceneState.openingTone" :opening-color="openingPaper" :reduced-motion="reducedMotion" :skip-opening="skipOpening" @progress="sceneProgress = Math.max(sceneProgress, $event)" @failure="sceneFailed = true" @ready="finishOpening" />
     <div v-if="!authLayout && (openingPhase === 'loading' || openingPhase === 'revealing')" class="corner-loading" :aria-hidden="openingPhase === 'revealing'">
       <div class="corner-loading-copy">
         <div class="corner-loading-identity" aria-label="max">

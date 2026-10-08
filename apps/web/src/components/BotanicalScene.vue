@@ -1,55 +1,57 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import * as THREE from 'three'
+import { fetchBotanicalBytes, wallAssetBytes, botanicalTextureUrl, botanicalTextureBytes, loadReferenceGeometry, referenceGeometryBytes, referenceGeometryKey } from './botanicalAssetLoader'
 import { makeBotanicalRelief } from './botanicalRelief'
 import { makeReferenceMainFlower } from './botanicalReferenceFlower'
 import { makeReferenceFlowerStems } from './botanicalReferenceFlowerStems'
-import flowerStemsReferenceUrl from '../assets/flower-stems-approved-reference.png'
 import { makeReferenceGinkgo } from './botanicalReferenceGinkgo'
-import ginkgoReferenceUrl from '../assets/ginkgo-approved-reference.png'
 import { makeReferenceBroadleaf } from './botanicalReferenceBroadleaf'
-import broadleafReferenceUrl from '../assets/broadleaf-approved-reference.png'
 import { makeReferenceIvy } from './botanicalReferenceIvy'
-import ivyReferenceUrl from '../assets/ivy-approved-reference.png'
 import { makeReferenceLeftSprig } from './botanicalReferenceLeftSprig'
-import leftSprigReferenceUrl from '../assets/left-sprig-v2-cutout.png'
 import { makeReferenceUmbel } from './botanicalReferenceUmbel'
-import umbelReferenceUrl from '../assets/umbel-approved-reference.png'
 import { makeReferenceRightPair } from './botanicalReferenceRightPair'
-import rightPairReferenceUrl from '../assets/right-pair-approved-reference.png'
 import { makeReferenceBottomLayer } from './botanicalReferenceBottomLayer'
-import bottomLayerReferenceUrl from '../assets/bottom-layer-approved-reference.png'
 import { makeReferenceGapSprig } from './botanicalReferenceGapSprig'
-import gapSprigReferenceUrl from '../assets/gap-sprig-approved-reference.png'
 import { makeReferenceFern } from './botanicalReferenceFern'
-import fernReferenceUrl from '../assets/fern-v3-cutout.png'
 import { makeReferenceBottomLeftAdditions } from './botanicalReferenceBottomLeftAdditions'
-import bottomLeftAdditionsUrl from '../assets/bottom-left-additions-cutout.png'
 import { makeReferenceBamboo } from './botanicalReferenceBamboo'
-import bambooReferenceUrl from '../assets/bamboo-cutout.png'
 import { makeReferenceShoot } from './botanicalReferenceShoot'
-import shootReferenceUrl from '../assets/shoot-step-01-approved.png'
 import { makeReferenceRightShoot } from './botanicalReferenceRightShoot'
-import rightShootReferenceUrl from '../assets/shoot-step-02-approved.png'
 import { makeReferencePairTallShoot } from './botanicalReferencePairTallShoot'
-import pairTallShootReferenceUrl from '../assets/shoot-step-03-approved.png'
 import { makeReferencePairShortShoot } from './botanicalReferencePairShortShoot'
-import pairShortShootReferenceUrl from '../assets/shoot-step-04-approved.png'
 import { makeReferenceTallBamboo } from './botanicalReferenceTallBamboo'
-import tallBambooReferenceUrl from '../assets/bamboo-tall-01-approved.png'
 import { makeReferenceSecondTallBamboo } from './botanicalReferenceSecondTallBamboo'
-import secondTallBambooReferenceUrl from '../assets/bamboo-tall-02-approved.png'
 import { makeReferenceCenterBamboo } from './botanicalReferenceCenterBamboo'
-import centerBambooReferenceUrl from '../assets/center-bamboo-01-approved.png'
 import { makeReferenceCenterFineBamboo } from './botanicalReferenceCenterFineBamboo'
-import centerFineBambooReferenceUrl from '../assets/center-bamboo-02-approved.png'
 import { makeReferenceRemainingBotanicals } from './botanicalReferenceRemaining'
 import { makeReferenceBirds } from './botanicalReferenceBirds'
-import wideBirdReferenceUrl from '../assets/birds-wide-approved.png'
-import gatheredBirdReferenceUrl from '../assets/birds-gathered-approved.png'
-import flowerReferenceUrl from '../assets/flower-approved-reference.png'
 import wallNormalUrl from '../assets/beige_wall_001_nor_gl_1k.jpg'
 import wallRoughUrl from '../assets/beige_wall_001_rough_1k.jpg'
+
+const flowerStemsReferenceUrl = botanicalTextureUrl('flower-stems-approved-reference.png')
+const ginkgoReferenceUrl = botanicalTextureUrl('ginkgo-approved-reference.png')
+const broadleafReferenceUrl = botanicalTextureUrl('broadleaf-approved-reference.png')
+const ivyReferenceUrl = botanicalTextureUrl('ivy-approved-reference.png')
+const leftSprigReferenceUrl = botanicalTextureUrl('left-sprig-v2-cutout.png')
+const umbelReferenceUrl = botanicalTextureUrl('umbel-approved-reference.png')
+const rightPairReferenceUrl = botanicalTextureUrl('right-pair-approved-reference.png')
+const bottomLayerReferenceUrl = botanicalTextureUrl('bottom-layer-approved-reference.png')
+const gapSprigReferenceUrl = botanicalTextureUrl('gap-sprig-approved-reference.png')
+const fernReferenceUrl = botanicalTextureUrl('fern-v3-cutout.png')
+const bottomLeftAdditionsUrl = botanicalTextureUrl('bottom-left-additions-cutout.png')
+const bambooReferenceUrl = botanicalTextureUrl('bamboo-cutout.png')
+const shootReferenceUrl = botanicalTextureUrl('shoot-step-01-approved.png')
+const rightShootReferenceUrl = botanicalTextureUrl('shoot-step-02-approved.png')
+const pairTallShootReferenceUrl = botanicalTextureUrl('shoot-step-03-approved.png')
+const pairShortShootReferenceUrl = botanicalTextureUrl('shoot-step-04-approved.png')
+const tallBambooReferenceUrl = botanicalTextureUrl('bamboo-tall-01-approved.png')
+const secondTallBambooReferenceUrl = botanicalTextureUrl('bamboo-tall-02-approved.png')
+const centerBambooReferenceUrl = botanicalTextureUrl('center-bamboo-01-approved.png')
+const centerFineBambooReferenceUrl = botanicalTextureUrl('center-bamboo-02-approved.png')
+const wideBirdReferenceUrl = botanicalTextureUrl('birds-wide-approved.png')
+const gatheredBirdReferenceUrl = botanicalTextureUrl('birds-gathered-approved.png')
+const flowerReferenceUrl = botanicalTextureUrl('flower-approved-reference.png')
 
 const props = defineProps<{ menu: number; content: number; scroll: number; hover: number; reveal: number; openingTone: number; openingColor: string; reducedMotion: boolean; skipOpening: boolean }>()
 const emit = defineEmits<{ progress: [value: number]; failure: []; ready: [result: { failed: boolean }] }>()
@@ -572,116 +574,107 @@ onMounted(() => {
     }
     material.customProgramCacheKey=()=> cacheKey+'-opaque-mist-1'
   })
-  const textures: THREE.Texture[]=[];let completed=1,failed=false,ready=false
-  const requiredAssets=mobile ? 3 : 26+remainingBotanicals.length
-  emit('progress',1/requiredAssets)
-  const loader=new THREE.TextureLoader()
-  function settled(error=false){if(disposed)return;completed++;failed ||= error;if(error)emit('failure');emit('progress',completed/requiredAssets);requestDraw()}
-  remainingBotanicals.forEach(({mesh,textureUrl})=>loader.load(textureUrl,texture=>{
-    if(disposed){texture.dispose();return}textures.push(texture);texture.colorSpace=THREE.SRGBColorSpace
-    mesh.material.map=texture;mesh.material.needsUpdate=true;settled()
-  },undefined,()=>settled(true)))
-  if(centerFineBambooMaterial)loader.load(centerFineBambooReferenceUrl,texture=>{
-    if(disposed){texture.dispose();return}textures.push(texture);texture.colorSpace=THREE.SRGBColorSpace
-    centerFineBambooMaterial.map=texture;centerFineBambooMaterial.needsUpdate=true;settled()
-  },undefined,()=>settled(true))
-  if(centerBambooMaterial)loader.load(centerBambooReferenceUrl,texture=>{
-    if(disposed){texture.dispose();return}textures.push(texture);texture.colorSpace=THREE.SRGBColorSpace
-    centerBambooMaterial.map=texture;centerBambooMaterial.needsUpdate=true;settled()
-  },undefined,()=>settled(true))
-  if(pairShortShootMaterial)loader.load(pairShortShootReferenceUrl,texture=>{
-    if(disposed){texture.dispose();return}textures.push(texture);texture.colorSpace=THREE.SRGBColorSpace
-    pairShortShootMaterial.map=texture;pairShortShootMaterial.needsUpdate=true;settled()
-  },undefined,()=>settled(true))
-  if(pairTallShootMaterial)loader.load(pairTallShootReferenceUrl,texture=>{
-    if(disposed){texture.dispose();return}textures.push(texture);texture.colorSpace=THREE.SRGBColorSpace
-    pairTallShootMaterial.map=texture;pairTallShootMaterial.needsUpdate=true;settled()
-  },undefined,()=>settled(true))
-  if(rightShootMaterial)loader.load(rightShootReferenceUrl,texture=>{
-    if(disposed){texture.dispose();return}textures.push(texture);texture.colorSpace=THREE.SRGBColorSpace
-    rightShootMaterial.map=texture;rightShootMaterial.needsUpdate=true;settled()
-  },undefined,()=>settled(true))
-  if(secondTallBambooMaterial)loader.load(secondTallBambooReferenceUrl,texture=>{
-    if(disposed){texture.dispose();return}textures.push(texture);texture.colorSpace=THREE.SRGBColorSpace
-    secondTallBambooMaterial.map=texture;secondTallBambooMaterial.needsUpdate=true;settled()
-  },undefined,()=>settled(true))
-  if(tallBambooMaterial)loader.load(tallBambooReferenceUrl,texture=>{
-    if(disposed){texture.dispose();return}textures.push(texture);texture.colorSpace=THREE.SRGBColorSpace
-    tallBambooMaterial.map=texture;tallBambooMaterial.needsUpdate=true;settled()
-  },undefined,()=>settled(true))
-  if(shootMaterial)loader.load(shootReferenceUrl,texture=>{
-    if(disposed){texture.dispose();return}textures.push(texture);texture.colorSpace=THREE.SRGBColorSpace
-    shootMaterial.map=texture;shootMaterial.needsUpdate=true;settled()
-  },undefined,()=>settled(true))
-  referenceBirds.forEach((bird,index)=>loader.load([wideBirdReferenceUrl,gatheredBirdReferenceUrl][index]!,texture=>{
-    if(disposed){texture.dispose();return}textures.push(texture);texture.colorSpace=THREE.SRGBColorSpace
-    bird.material.map=texture;bird.material.needsUpdate=true;settled()
-  },undefined,()=>settled(true)))
-  if(flowerMaterial)loader.load(flowerReferenceUrl,texture=>{
-    if(disposed){texture.dispose();return}textures.push(texture);texture.colorSpace=THREE.SRGBColorSpace
-    flowerMaterial.map=texture;flowerMaterial.needsUpdate=true;settled()
-  },undefined,()=>settled(true))
-  if(flowerStemMaterial)loader.load(flowerStemsReferenceUrl,texture=>{
-    if(disposed){texture.dispose();return}textures.push(texture);texture.colorSpace=THREE.SRGBColorSpace
-    flowerStemMaterial.map=texture;flowerStemMaterial.needsUpdate=true;settled()
-  },undefined,()=>settled(true))
-  if(ginkgoMaterial)loader.load(ginkgoReferenceUrl,texture=>{
-    if(disposed){texture.dispose();return}textures.push(texture);texture.colorSpace=THREE.SRGBColorSpace
-    ginkgoMaterial.map=texture;ginkgoMaterial.needsUpdate=true;settled()
-  },undefined,()=>settled(true))
-  if(broadleafMaterial)loader.load(broadleafReferenceUrl,texture=>{
-    if(disposed){texture.dispose();return}textures.push(texture);texture.colorSpace=THREE.SRGBColorSpace
-    broadleafMaterial.map=texture;broadleafMaterial.needsUpdate=true;settled()
-  },undefined,()=>settled(true))
-  if(ivyMaterial)loader.load(ivyReferenceUrl,texture=>{
-    if(disposed){texture.dispose();return}textures.push(texture);texture.colorSpace=THREE.SRGBColorSpace
-    ivyMaterial.map=texture;ivyMaterial.needsUpdate=true;settled()
-  },undefined,()=>settled(true))
-  if(leftSprigMaterial)loader.load(leftSprigReferenceUrl,texture=>{
-    if(disposed){texture.dispose();return}textures.push(texture);texture.colorSpace=THREE.SRGBColorSpace
-    leftSprigMaterial.map=texture;leftSprigMaterial.needsUpdate=true;settled()
-  },undefined,()=>settled(true))
-  if(umbelMaterial)loader.load(umbelReferenceUrl,texture=>{
-    if(disposed){texture.dispose();return}textures.push(texture);texture.colorSpace=THREE.SRGBColorSpace
-    umbelMaterial.map=texture;umbelMaterial.needsUpdate=true;settled()
-  },undefined,()=>settled(true))
-  if(rightPairMaterial)loader.load(rightPairReferenceUrl,texture=>{
-    if(disposed){texture.dispose();return}textures.push(texture);texture.colorSpace=THREE.SRGBColorSpace
-    rightPairMaterial.map=texture;rightPairMaterial.needsUpdate=true;settled()
-  },undefined,()=>settled(true))
-  if(bottomLayerMaterial)loader.load(bottomLayerReferenceUrl,texture=>{
-    if(disposed){texture.dispose();return}textures.push(texture);texture.colorSpace=THREE.SRGBColorSpace
-    bottomLayerMaterial.map=texture;bottomLayerMaterial.needsUpdate=true;settled()
-  },undefined,()=>settled(true))
-  if(gapSprigMaterial)loader.load(gapSprigReferenceUrl,texture=>{
-    if(disposed){texture.dispose();return}textures.push(texture);texture.colorSpace=THREE.SRGBColorSpace
-    gapSprigMaterial.map=texture;gapSprigMaterial.needsUpdate=true;settled()
-  },undefined,()=>settled(true))
-  if(fernMaterial)loader.load(fernReferenceUrl,texture=>{
-    if(disposed){texture.dispose();return}textures.push(texture);texture.colorSpace=THREE.SRGBColorSpace
-    fernMaterial.map=texture;fernMaterial.needsUpdate=true;settled()
-  },undefined,()=>settled(true))
-  if(bottomLeftMaterial)loader.load(bottomLeftAdditionsUrl,texture=>{
-    if(disposed){texture.dispose();return}textures.push(texture);texture.colorSpace=THREE.SRGBColorSpace
-    bottomLeftMaterial.map=texture;bottomLeftMaterial.needsUpdate=true;settled()
-  },undefined,()=>settled(true))
-  if(bambooMaterial)loader.load(bambooReferenceUrl,texture=>{
-    if(disposed){texture.dispose();return}textures.push(texture);texture.colorSpace=THREE.SRGBColorSpace
-    bambooMaterial.map=texture;bambooMaterial.needsUpdate=true;settled()
-  },undefined,()=>settled(true))
-  loader.load(wallNormalUrl,texture=>{
-    if(disposed){texture.dispose();return}textures.push(texture);texture.wrapS=texture.wrapT=THREE.RepeatWrapping;texture.repeat.set(5,3)
-    wallMaterial.normalMap=stone.normalMap=texture;wallMaterial.normalScale.set(mobile ? .04 : .06,mobile ? .04 : .06);stone.normalScale.set(.012,.012);stone.needsUpdate=wallMaterial.needsUpdate=true;settled()
-  },undefined,()=>settled(true))
-  loader.load(wallRoughUrl,texture=>{
-    if(disposed){texture.dispose();return}textures.push(texture);texture.wrapS=texture.wrapT=THREE.RepeatWrapping;texture.repeat.set(5,3)
-    wallMaterial.roughnessMap=stone.roughnessMap=texture;stone.needsUpdate=wallMaterial.needsUpdate=true;settled()
-  },undefined,()=>settled(true))
+  const textures: THREE.Texture[]=[];let failed=false,ready=false,firstPending=0,backgroundComplete=false
+  const controller=new AbortController(),loader=new THREE.TextureLoader()
+  type ReferenceMesh = THREE.Mesh<THREE.BufferGeometry,THREE.MeshStandardMaterial>
+  type AssetJob = { mesh?: ReferenceMesh; url:string; first:boolean; bytes:number; apply?: (texture:THREE.Texture)=>void; received:number }
+  const jobs:AssetJob[]=[]
+  function addModel(mesh:ReferenceMesh|undefined,url:string){
+    if(!mesh)return
+    mesh.visible=false
+    const key=referenceGeometryKey(mesh.geometry)
+    jobs.push({mesh,url,first:['birds-wide','birds-gathered','ginkgo'].includes(key??''),bytes:referenceGeometryBytes(mesh.geometry)+botanicalTextureBytes(url),received:0})
+  }
+  referenceBirds.forEach((bird,index)=>addModel(bird,[wideBirdReferenceUrl,gatheredBirdReferenceUrl][index]!))
+  addModel(referenceGinkgo,ginkgoReferenceUrl)
+  addModel(referenceFlower,flowerReferenceUrl)
+  addModel(referenceFlowerStems,flowerStemsReferenceUrl)
+  addModel(referenceBamboo,bambooReferenceUrl)
+  addModel(referenceTallBamboo,tallBambooReferenceUrl)
+  addModel(referenceSecondTallBamboo,secondTallBambooReferenceUrl)
+  addModel(referenceBroadleaf,broadleafReferenceUrl)
+  addModel(referenceIvy,ivyReferenceUrl)
+  addModel(referenceUmbel,umbelReferenceUrl)
+  addModel(referenceLeftSprig,leftSprigReferenceUrl)
+  addModel(referenceRightPair,rightPairReferenceUrl)
+  addModel(referenceBottomLayer,bottomLayerReferenceUrl)
+  addModel(referenceGapSprig,gapSprigReferenceUrl)
+  addModel(referenceFern,fernReferenceUrl)
+  addModel(referenceBottomLeft,bottomLeftAdditionsUrl)
+  addModel(referenceShoot,shootReferenceUrl)
+  addModel(referenceRightShoot,rightShootReferenceUrl)
+  addModel(referencePairTallShoot,pairTallShootReferenceUrl)
+  addModel(referencePairShortShoot,pairShortShootReferenceUrl)
+  addModel(referenceCenterBamboo,centerBambooReferenceUrl)
+  addModel(referenceCenterFineBamboo,centerFineBambooReferenceUrl)
+  remainingBotanicals.forEach(({mesh,textureUrl})=>addModel(mesh,textureUrl))
+  jobs.push({url:wallNormalUrl,first:true,bytes:wallAssetBytes.normal,received:0,apply:texture=>{
+    texture.wrapS=texture.wrapT=THREE.RepeatWrapping;texture.repeat.set(5,3)
+    wallMaterial.normalMap=stone.normalMap=texture;wallMaterial.normalScale.set(mobile ? .04 : .06,mobile ? .04 : .06);stone.normalScale.set(.012,.012);stone.needsUpdate=wallMaterial.needsUpdate=true
+  }},{url:wallRoughUrl,first:true,bytes:wallAssetBytes.rough,received:0,apply:texture=>{
+    texture.wrapS=texture.wrapT=THREE.RepeatWrapping;texture.repeat.set(5,3)
+    wallMaterial.roughnessMap=stone.roughnessMap=texture;stone.needsUpdate=wallMaterial.needsUpdate=true
+  }})
+  const firstJobs=jobs.filter(job=>job.first),backgroundJobs=jobs.filter(job=>!job.first)
+  firstPending=firstJobs.length
+  const firstBytes=firstJobs.reduce((sum,job)=>sum+job.bytes,0)
+  function reportProgress(){
+    if(disposed||ready)return
+    const received=firstJobs.reduce((sum,job)=>sum+Math.min(job.bytes,job.received),0)
+    emit('progress',.05+.90*Math.min(1,received/firstBytes))
+  }
+  async function loadTexture(job:AssetJob,offset:number){
+    const bytes=await fetchBotanicalBytes(job.url,controller.signal,n=>{job.received=offset+n;reportProgress()})
+    const objectUrl=URL.createObjectURL(new Blob([bytes]))
+    try{return await loader.loadAsync(objectUrl)}finally{URL.revokeObjectURL(objectUrl)}
+  }
+  async function runJob(job:AssetJob){
+    try{
+      if(job.mesh)await loadReferenceGeometry(job.mesh.geometry,controller.signal,n=>{job.received=n;reportProgress()})
+      const texture=await loadTexture(job,job.mesh ? referenceGeometryBytes(job.mesh.geometry) : 0)
+      if(disposed){texture.dispose();return}
+      textures.push(texture)
+      if(job.mesh){
+        texture.colorSpace=THREE.SRGBColorSpace;job.mesh.material.map=texture;job.mesh.material.needsUpdate=true
+        job.mesh.visible=true;job.mesh.userData.loadedAt=performance.now()
+        if(!job.first&&!props.reducedMotion)job.mesh.material.opacity=0
+      }
+      else job.apply?.(texture)
+    }catch(error){
+      if(disposed||controller.signal.aborted)return
+      failed=true;emit('failure');console.warn('Botanical asset failed',job.mesh ? referenceGeometryKey(job.mesh.geometry) : job.url,error)
+    }finally{
+      if(!disposed){job.received=job.bytes;if(job.first)firstPending--;reportProgress();requestDraw()}
+    }
+  }
+  async function runQueue(queue:AssetJob[]){
+    // 两个并发槽优先服务首屏；后台队列只在揭幕完成后启动，避免占用首屏带宽。
+    const pending=[...queue]
+    await Promise.all([0,1].map(async()=>{while(pending.length&&!disposed)await runJob(pending.shift()!)}))
+    if(!disposed&&queue===backgroundJobs){backgroundComplete=true;status.value=failed ? 'simplified' : 'complete';requestDraw()}
+  }
+  let backgroundStarted=false
+  function startBackground(){
+    if(backgroundStarted||!ready||(!props.skipOpening&&props.reveal<.99))return
+    backgroundStarted=true;void runQueue(backgroundJobs)
+  }
+  const stopBackgroundWatch=watch(()=>[props.reveal,props.skipOpening],startBackground)
+  emit('progress',.05)
+  void runQueue(firstJobs)
   let index=0,lastTime=0,lastMove=-10,inside=false,energy=0,aspect=1
   const targetPointer=new THREE.Vector2(.5,.5),easedPointer=targetPointer.clone(),previousPointer=targetPointer.clone()
   let pressure=0,radius=.15,motion=0
   const autoPointer=flowUniforms.autoPointer.value,autoStart=new THREE.Vector2(),autoEnd=new THREE.Vector2()
   let autoRunning=false,autoPaused=false,autoSegments=0,autoAxis=0,autoElapsed=0,autoDuration=0,autoSeed=0,autoTimer=0
+  function loadedAutomaticPoint(){
+    const loaded=jobs.filter(job=>job.mesh?.visible)
+    const mesh=loaded[Math.floor(Math.random()*loaded.length)]?.mesh
+    const center=mesh?.geometry.boundingSphere?.center
+    if(!mesh||!center)return new THREE.Vector2(.5,.5)
+    const x=.5+center.x*mesh.scale.x/(uniforms.botanicalExtent.value.x*2)
+    const y=.5+center.y/(uniforms.botanicalExtent.value.y*2)
+    return new THREE.Vector2(THREE.MathUtils.clamp(x+(Math.random()-.5)*.12,.05,.95),THREE.MathUtils.clamp(y+(Math.random()-.5)*.12,.05,.95))
+  }
   function stopAutomaticReveal(){
     window.clearTimeout(autoTimer);autoTimer=0;autoRunning=false;autoPaused=false
     autoPointer.set(-1,-1);flowUniforms.autoStrength.value=0
@@ -690,6 +683,8 @@ onMounted(() => {
     autoStart.copy(autoPointer)
     const angle=Math.random()*Math.PI*2,distance=.35+Math.random()*.1
     autoEnd.set(.5+Math.cos(angle)*distance,.5+Math.sin(angle)*distance)
+    // 分批加载期间只扫过已就绪对象；全部补齐后恢复原有全画面随机轨迹。
+    if(!backgroundComplete)autoEnd.copy(loadedAutomaticPoint())
     autoAxis=0;autoElapsed=0;autoDuration=.7+Math.random()*.3;autoSeed=Math.random()*Math.PI*2
   }
   function updateAutomaticReveal(dt:number,allowed:boolean){
@@ -697,7 +692,9 @@ onMounted(() => {
     if(autoPaused)return
     if(!autoRunning){
       autoRunning=true;autoSegments=1+Math.floor(Math.random()*3)
-      autoPointer.set(.05+Math.random()*.9,.05+Math.random()*.9);nextAutomaticSegment()
+      if(backgroundComplete)autoPointer.set(.05+Math.random()*.9,.05+Math.random()*.9)
+      else autoPointer.copy(loadedAutomaticPoint())
+      nextAutomaticSegment()
     }
     autoElapsed+=dt
     const progress=Math.min(1,autoElapsed/autoDuration)
@@ -840,10 +837,17 @@ onMounted(() => {
     flowerTint.value.set(stone.color.r/paper.r,stone.color.g/paper.g,stone.color.b/paper.b)
     backdrop.copy(paper).lerp(nightBackground,menu)
     container.style.opacity=String(1-Math.min(props.scroll,1)*.97*(1-menu))
+    let assetsFading=false
+    for(const job of jobs){
+      if(!job.mesh?.visible||job.mesh.material.opacity===1)continue
+      // 晚到的网格沿现有迷雾柔和接入；鼠标场、抬升和阴影公式不变。
+      job.mesh.material.opacity=props.reducedMotion ? 1 : Math.min(1,(now-job.mesh.userData.loadedAt)/600)
+      assetsFading ||= job.mesh.material.opacity<1
+    }
     gl.render(scene,camera)
-    if(completed===requiredAssets&&!ready){ready=true;status.value=failed ? 'simplified' : 'ready';emit('ready',{failed})}
+    if(firstPending===0&&!ready){ready=true;status.value=failed ? 'simplified' : 'ready';emit('progress',1);emit('ready',{failed});startBackground()}
     // 桌面驻留与自动轨迹共同接续影响场；间歇回浅后停止逐帧工作，指针、页面状态或下一轮轨迹再唤醒。
-    if(energy>.002||pressure>.002||autoRunning)requestDraw()
+    if(energy>.002||pressure>.002||autoRunning||assetsFading)requestDraw()
   }
   requestDraw=()=>{if(!frame&&!disposed&&!document.hidden)frame=requestAnimationFrame(draw)}
   const visibility=()=>{lastTime=0;if(!mobile&&document.hidden){inside=false;stopAutomaticReveal()}requestDraw()}
@@ -851,6 +855,7 @@ onMounted(() => {
   document.documentElement.addEventListener('pointerleave',leave);document.addEventListener('visibilitychange',visibility)
   observer=new ResizeObserver(resize);observer.observe(container);resize()
   cleanup=()=>{
+    controller.abort();stopBackgroundWatch()
     stopAutomaticReveal()
     window.removeEventListener('pointermove',pointer);window.removeEventListener('pointerdown',pointer)
     document.documentElement.removeEventListener('pointerleave',leave);document.removeEventListener('visibilitychange',visibility)
